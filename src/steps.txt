@@ -1,0 +1,34 @@
+python3.6 single_frame_cnn.py train_initial --fold 3 --model resnet50_avg; python3.6 single_frame_cnn.py train_continue --fold 3 --model resnet50_avg
+
+
+python3.6 single_frame_cnn.py generate_prediction --model resnet50_avg --fold 1 --weights ../output/checkpoints/resnet50_avg_fold_1/checkpoint-007-0.0480.hdf5
+python3.6 single_frame_cnn.py generate_prediction --model resnet50_avg --fold 4 --weights ../output/checkpoints/resnet50_avg_fold_4/checkpoint-015-0.0352.hdf5
+python3.6 single_frame_cnn.py generate_prediction --model resnet50_avg --fold 3 --weights ../output/checkpoints/resnet50_avg_fold_3/checkpoint-004-0.0813.hdf5
+python3.6 single_frame_cnn.py generate_prediction --model resnet50 --fold 2 --weights ../output/checkpoints/resnet50_fold_2/checkpoint-016-0.0342.hdf5
+
+
+python3.6 single_frame_cnn.py generate_prediction_test --model resnet50_avg --fold 4 --weights ../output/checkpoints/resnet50_avg_fold_4/checkpoint-015-0.0352.hdf5
+
+# unfinished, to continue:
+python3.6 single_frame_cnn.py generate_prediction_test --model resnet50 --fold 2 --weights ../output/checkpoints/resnet50_fold_2/checkpoint-016-0.0342.hdf5
+
+
+python3.6 single_frame_cnn.py find_non_blank_frames --fold 1 --model resnet50_avg
+python3.6 single_frame_cnn.py find_non_blank_frames --fold 4 --model resnet50_avg
+
+
+
+# train inception v3
+python3.6 single_frame_cnn.py train_initial --fold 3 --model inception_v3_avg --use_non_blank_frames
+python3.6 single_frame_cnn.py train_continue --fold 3 --model inception_v3_avg --use_non_blank_frames
+# continue with more layers unfrozen
+python3.6 single_frame_cnn.py train_continue --fold 3 --model inception_v3_avg_m8 --use_non_blank_frames --weights ../output/checkpoints/inception_v3_avg_fold_3/checkpoint-009-0.0540.hdf5 --initial_epoch 10
+
+
+
+
+
+
+submissions:
+sub 1, single model/fold, resnet50_avg, fold1
+sub 2, single model/fold, resnet50_avg, fold4

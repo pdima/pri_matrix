@@ -27,9 +27,12 @@ from sklearn.model_selection import train_test_split
 
 from multiprocessing.pool import ThreadPool
 import concurrent.futures
+from queue import Queue
+from tqdm import tqdm
 
 import config
 import utils
+import pickle
 
 from tensorflow.python.keras import backend as K
 from PIL import Image
@@ -91,9 +94,11 @@ def build_model_inception_v3_avg(lock_base_model: True):
     if lock_base_model:
         for layer in base_model.layers:
             layer.trainable = False
-    x = GlobalAveragePooling2D(name='avg_pool_final')(base_model.layers[-2].output)
+    # base_model.summary()
+    x = GlobalAveragePooling2D(name='avg_pool_final')(base_model.layers[-1].output)
     res = Dense(NB_CLASSES, activation='sigmoid', name='classes', kernel_initializer='zero', kernel_regularizer=l1(1e-5))(x)
     model = Model(inputs=base_model.inputs, outputs=res)
+    # model.summary()
     return model
 
 
@@ -117,12 +122,18 @@ MODELS = {
         preprocess_input=preprocess_input_inception_v3,
         input_shape=(404, 720, 3),
         unlock_layer_name='mixed9'
+    ),
+    'inception_v3_avg_m8': ModelInfo(
+        factory=build_model_inception_v3_avg,
+        preprocess_input=preprocess_input_inception_v3,
+        input_shape=(404, 720, 3),
+        unlock_layer_name='mixed8'
     )
 }
 
 
 class SingleFrameCNNDataset:
-    def __init__(self, fold, preprocess_input_func, batch_size, validation_batch_size=1):
+    def __init__(self, fold, preprocess_input_func, batch_size, validation_batch_size=1, use_non_blank_frames=False):
         self.validation_batch_size = validation_batch_size
         self.batch_size = batch_size
         self.combine_batches = 1  # combine multiple batches in generator for parallel processing
@@ -162,6 +173,16 @@ class SingleFrameCNNDataset:
 
         for cls in range(NB_CLASSES):
             print(CLASSES[cls], len(self.train_clips_per_cat[cls]))
+
+        self.non_blank_frames = {}
+        if use_non_blank_frames:
+            for fn in ['resnet50_avg_1_non_blank.pkl',
+                       'resnet50_2_non_blank.pkl',
+                       'resnet50_avg_3_non_blank.pkl',
+                       'resnet50_avg_4_non_blank.pkl']:
+                data = pickle.load(open('../output/prediction_train_frames/'+fn, 'rb'))
+                self.non_blank_frames.update(data)
+
 
     def train_steps_per_epoch(self):
         preprocess_batch_size = self.batch_size * self.combine_batches
@@ -203,7 +224,12 @@ class SingleFrameCNNDataset:
         y = np.zeros(shape=(batch_size, NB_CLASSES), dtype=np.float32)
 
         def load_clip(video_id):
-            return self.load_train_clip(video_id, offset=np.random.randint(1, 17), hflip=np.random.choice([True, False]))
+            if video_id in self.non_blank_frames:
+                weights = self.non_blank_frames[video_id]
+                offset = np.random.choice(list(range(1, 17)), p=weights/np.sum(weights))
+            else:
+                offset = np.random.randint(1, 17)
+            return self.load_train_clip(video_id, offset=offset, hflip=np.random.choice([True, False]))
 
         while True:
             video_ids = self.train_clips
@@ -301,7 +327,7 @@ def check_generator(use_test):
             plt.show()
 
 
-def train_initial(fold, model_name):
+def train_initial(fold, model_name, use_non_blank_frames):
     model_info = MODELS[model_name]
     model = model_info.factory(lock_base_model=True)
     model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
@@ -310,7 +336,8 @@ def train_initial(fold, model_name):
     dataset = SingleFrameCNNDataset(preprocess_input_func=model_info.preprocess_input,
                                     fold=fold,
                                     batch_size=32,
-                                    validation_batch_size=16)
+                                    validation_batch_size=16,
+                                    use_non_blank_frames=use_non_blank_frames)
 
     tensorboard_dir = f'../output/tensorboard/{model_name}_initial_fold_{fold}'
     os.makedirs(tensorboard_dir, exist_ok=True)
@@ -331,7 +358,7 @@ def train_initial(fold, model_name):
     np.save(f'../output/{model_name}_s_initial_fold_{fold}_tf_last_w.npy', last_w)
 
 
-def train_continue(fold, model_name, weights, initial_epoch):
+def train_continue(fold, model_name, weights, initial_epoch, use_non_blank_frames):
     model_info = MODELS[model_name]
     model = model_info.factory(lock_base_model=True)
     utils.lock_layers_until(model, model_info.unlock_layer_name)
@@ -341,13 +368,14 @@ def train_continue(fold, model_name, weights, initial_epoch):
     else:
         model.load_weights(weights)
 
-    # model.summary()
+    model.summary()
     model.compile(optimizer=RMSprop(lr=3e-4), loss='binary_crossentropy', metrics=['accuracy'])
 
     dataset = SingleFrameCNNDataset(preprocess_input_func=model_info.preprocess_input,
                                     fold=fold,
                                     batch_size=32,
-                                    validation_batch_size=16)
+                                    validation_batch_size=16,
+                                    use_non_blank_frames=use_non_blank_frames)
 
     checkpoints_dir = f'../output/checkpoints/{model_name}_fold_{fold}'
     tensorboard_dir = f'../output/tensorboard/{model_name}_fold_{fold}'
@@ -356,9 +384,9 @@ def train_continue(fold, model_name, weights, initial_epoch):
 
     def cheduler(epoch):
         if epoch < 5:
-            return 3e-4
-        if epoch < 10:
             return 1e-4
+        if epoch < 10:
+            return 3e-5
         if epoch < 15:
             return 5e-5
         return 3e-5
@@ -427,26 +455,39 @@ def generate_prediction(model_name, weights, fold):
         if os.path.exists(res_fn):
             processed_files += 1
             converted_files.add(video_id)
-    dataset.test_clips = sorted(list(set(dataset.test_clips) - converted_files))
+    test_clips = sorted(list(set(dataset.test_clips) - converted_files))
+
+    def load_file(video_id):
+        X = dataset.frames_from_video_clip(video_fn=os.path.join(config.RAW_VIDEO_DIR, video_id))
+        y = dataset.training_set_labels_ds.loc[[video_id]].as_matrix(columns=CLASSES)
+        return video_id, X, y
 
     start_time = time.time()
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
-    for video_id, X, y in utils.parallel_generator(dataset.generate_frames_for_prediction(), executor):
-        processed_files += 1
-        res_fn = output_dir + video_id + '.csv'
-        have_data_time = time.time()
-        prediction = model.predict(X, batch_size=4)
 
-        ds = pd.DataFrame(index=[-1]+PREDICT_FRAMES,
-                          data=np.row_stack([y, prediction]),
-                          columns=CLASSES)
-        ds.to_csv(res_fn, index_label='frame', float_format='%.5f')
+    pool = ThreadPool(8)
+    prev_res = None
+    for batch in utils.chunks(test_clips, 32, add_empty=True):
+        if prev_res is not None:
+            results = prev_res.get()
+        else:
+            results = []
+        prev_res = pool.map_async(load_file, batch)
+        for video_id, X, y in results:
+            processed_files += 1
+            res_fn = output_dir + video_id + '.csv'
+            have_data_time = time.time()
+            prediction = model.predict(X, batch_size=4)
 
-        have_prediction_time = time.time()
-        prepare_ms = int((have_data_time - start_time) * 1000)
-        predict_ms = int((have_prediction_time - have_data_time) * 1000)
-        start_time = time.time()
-        print(f'{video_id}  {processed_files} prepared in {prepare_ms} predicted in {predict_ms}')
+            ds = pd.DataFrame(index=[-1]+PREDICT_FRAMES,
+                              data=np.row_stack([y, prediction]),
+                              columns=CLASSES)
+            ds.to_csv(res_fn, index_label='frame', float_format='%.5f')
+
+            have_prediction_time = time.time()
+            prepare_ms = int((have_data_time - start_time) * 1000)
+            predict_ms = int((have_prediction_time - have_data_time) * 1000)
+            start_time = time.time()
+            print(f'{video_id}  {processed_files} prepared in {prepare_ms} predicted in {predict_ms}')
 
 
 def generate_prediction_test(model_name, weights, fold):
@@ -461,24 +502,72 @@ def generate_prediction_test(model_name, weights, fold):
                                     validation_batch_size=1,
                                     fold=fold)
 
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
-    processed_files = 0
-    start_time = time.time()
-    for video_id, X in utils.parallel_generator(dataset.generate_test_frames_for_prediction(), executor):
-        processed_files += 1
-        res_fn = output_dir+video_id+'.csv'
-        have_data_time = time.time()
-        prediction = model.predict(X, batch_size=4)
+    # skip processed files
+    test_clips = list(pd.read_csv(config.SUBMISSION_FORMAT).filename)
 
-        ds = pd.DataFrame(index=PREDICT_FRAMES,
-                          data=prediction,
-                          columns=CLASSES)
-        ds.to_csv(res_fn, index_label='frame', float_format='%.5f')
-        have_prediction_time = time.time()
-        prepare_ms = int((have_data_time-start_time)*1000)
-        predict_ms = int((have_prediction_time - have_data_time) * 1000)
-        start_time = time.time()
-        print(f'{video_id}  {processed_files} prepared in {prepare_ms} predicted in {predict_ms}')
+    converted_files = set()
+    processed_files = 0
+    for video_id in test_clips:
+        res_fn = output_dir + video_id + '.csv'
+        if os.path.exists(res_fn):
+            processed_files += 1
+            converted_files.add(video_id)
+
+    test_clips = sorted(list(set(test_clips) - converted_files))
+
+    def load_file(video_id):
+        X = dataset.frames_from_video_clip(video_fn=os.path.join(config.TEST_VIDEO_DIR, video_id))
+        return video_id, X
+
+    start_time = time.time()
+
+    pool = ThreadPool(8)
+    prev_res = None
+    for batch in utils.chunks(test_clips, 32, add_empty=True):
+        if prev_res is not None:
+            results = prev_res.get()
+        else:
+            results = []
+        prev_res = pool.map_async(load_file, batch)
+        for video_id, X in results:
+            processed_files += 1
+            res_fn = output_dir + video_id + '.csv'
+            have_data_time = time.time()
+            prediction = model.predict(X, batch_size=4)
+
+            ds = pd.DataFrame(index=PREDICT_FRAMES,
+                              data=prediction,
+                              columns=CLASSES)
+            ds.to_csv(res_fn, index_label='frame', float_format='%.5f')
+            have_prediction_time = time.time()
+            prepare_ms = int((have_data_time - start_time) * 1000)
+            predict_ms = int((have_prediction_time - have_data_time) * 1000)
+            start_time = time.time()
+            print(f'{video_id}  {processed_files} prepared in {prepare_ms} predicted in {predict_ms}')
+
+
+def find_non_blank_frames(model_name, fold):
+    data_dir = f'../output/prediction_train_frames/{model_name}_{fold}/'
+    training_labels = pd.read_csv(config.TRAINING_SET_LABELS)
+    training_labels = training_labels.set_index('filename')
+
+    res = {}
+
+    for fn in tqdm(sorted(os.listdir(data_dir))):
+        if not fn.endswith('csv'):
+            continue
+        filename = fn[:-len('.csv')]
+        if training_labels.loc[filename].blank > 0.9:
+            continue
+
+        ds = np.loadtxt(os.path.join(data_dir, fn), delimiter=',', skiprows=1)
+        target_frames = np.arange(0, 16)*12 + 5
+        src_frames = ds[1:, 0]
+
+        blank_col = 2
+        dst_blank_prob = np.interp(target_frames, src_frames, ds[1:, blank_col])
+        res[filename] = 1.0 - dst_blank_prob
+    pickle.dump(res, open(f"../output/prediction_train_frames/{model_name}_{fold}_non_blank.pkl", "wb"))
 
 
 if __name__ == '__main__':
@@ -488,6 +577,7 @@ if __name__ == '__main__':
     parser.add_argument('--initial_epoch', type=int, default=0)
     parser.add_argument('--fold', type=int, default=1)
     parser.add_argument('--model', type=str, default='resnet50')
+    parser.add_argument('--use_non_blank_frames', action='store_true')
 
     args = parser.parse_args()
     action = args.action
@@ -500,14 +590,17 @@ if __name__ == '__main__':
     elif action == 'check_model':
         check_model(model_name=model, weights=args.weights, fold=args.fold)
     elif action == 'train_initial':
-        train_initial(fold=args.fold, model_name=model)
+        train_initial(fold=args.fold, model_name=model, use_non_blank_frames=args.use_non_blank_frames)
     elif action == 'train_continue':
         train_continue(fold=args.fold,
                        model_name=model,
                        weights=args.weights,
-                       initial_epoch=args.initial_epoch)
+                       initial_epoch=args.initial_epoch,
+                       use_non_blank_frames=args.use_non_blank_frames)
     elif action == 'generate_prediction':
         generate_prediction(fold=args.fold, model_name=model, weights=args.weights)
     elif action == 'generate_prediction_test':
         generate_prediction_test(fold=args.fold, model_name=model, weights=args.weights)
+    elif action == 'find_non_blank_frames':
+        find_non_blank_frames(fold=args.fold, model_name=model)
 

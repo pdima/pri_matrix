@@ -78,11 +78,13 @@ def timeit_context(name):
     print('[{}] finished in {} ms'.format(name, int(elapsedTime * 1000)))
 
 
-def chunks(l, n):
+def chunks(l, n, add_empty=False):
     """Yield successive n-sized chunks from l."""
     for i in range(0, len(l) // n * n + n - 1, n):
         if len(l[i:i + n]):
             yield l[i:i + n]
+    if add_empty:
+        yield []
 
 
 def load_data(file_name):
@@ -252,6 +254,28 @@ def limit_mem(K):
 
 
 def parallel_generator(orig_gen, executor):
+    queue = Queue(maxsize=8)
+
+    def bg_task():
+        for i in orig_gen:
+            # print('bg_task', i)
+            queue.put(i)
+        # print('bg_task', None)
+        queue.put(None)
+
+    task = executor.submit(bg_task)
+    while True:
+        value = queue.get()
+        if value is not None:
+            yield value
+            queue.task_done()
+        else:
+            queue.task_done()
+            break
+    task.result()
+
+
+def parallel_generator_nthread(orig_gen, executor):
     queue = Queue(maxsize=8)
 
     def bg_task():
