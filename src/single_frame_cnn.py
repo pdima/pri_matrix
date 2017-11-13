@@ -215,7 +215,8 @@ class SingleFrameCNNDataset:
                 return np.random.choice(self.train_clips)
             else:
                 cls = np.random.randint(0, NB_CLASSES)
-                if len(self.train_clips_per_cat[cls]) > 10:
+                count_threshold = np.random.choice([1000, 100, 10, 1], p=[0.69, 0.2, 0.1, 0.01])
+                if len(self.train_clips_per_cat[cls]) >= count_threshold:
                     return np.random.choice(self.train_clips_per_cat[cls])
 
     def generate(self, verbose=False):
@@ -254,7 +255,12 @@ class SingleFrameCNNDataset:
         y = np.zeros(shape=(batch_size, NB_CLASSES), dtype=np.float32)
 
         def load_clip(video_id):
-            return self.load_train_clip(video_id)
+            if video_id in self.non_blank_frames:
+                weights = self.non_blank_frames[video_id]
+                offset = np.argmax(weights)+1  # first frame is skipped
+            else:
+                offset = 4
+            return self.load_train_clip(video_id, offset=offset)
 
         while True:
             video_ids = self.test_clips
@@ -368,7 +374,7 @@ def train_continue(fold, model_name, weights, initial_epoch, use_non_blank_frame
     else:
         model.load_weights(weights)
 
-    model.summary()
+    # model.summary()
     model.compile(optimizer=RMSprop(lr=3e-4), loss='binary_crossentropy', metrics=['accuracy'])
 
     dataset = SingleFrameCNNDataset(preprocess_input_func=model_info.preprocess_input,
@@ -401,7 +407,7 @@ def train_continue(fold, model_name, weights, initial_epoch, use_non_blank_frame
     model.fit_generator(
         dataset.generate(),
         steps_per_epoch=dataset.train_steps_per_epoch(),
-        epochs=120,
+        epochs=20,
         verbose=1,
         validation_data=dataset.generate_test(),
         validation_steps=dataset.validation_steps(),
