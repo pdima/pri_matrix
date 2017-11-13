@@ -95,11 +95,11 @@ def avg_probabilities():
     return data.mean(axis=0)
 
 
-def model_xgboost(model_name, load_cache=True):
+def model_xgboost(model_name, fold, load_cache=True):
     with utils.timeit_context('load data'):
-        cache_fn = f'../output/prediction_train_frames/{model_name}_cache.npz'
-        raw_cache_fn = f'../output/prediction_train_frames/{model_name}_raw_cache.npz'
-        X, y, video_ids = load_train_data(f'../output/prediction_train_frames/{model_name}/',
+        cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_cache.npz'
+        raw_cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_raw_cache.npz'
+        X, y, video_ids = load_train_data(f'../output/prediction_train_frames/{model_name}_{fold}/',
                                           load_cache=load_cache,
                                           cache_fn=cache_fn,
                                           load_raw_cache=True,
@@ -108,13 +108,12 @@ def model_xgboost(model_name, load_cache=True):
     y_cat = np.argmax(y, axis=1)
     print(X.shape, y.shape)
     print(np.unique(y_cat))
-    return
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_cat, test_size=0.25, random_state=42)
 
     model = XGBClassifier(n_estimators=500, objective='multi:softprob', silent=False)
     model.fit(X, y_cat)  # , eval_set=[(X_test, y_test)], early_stopping_rounds=20, verbose=True)
-    pickle.dump(model, open(f"../output/xgb_{model_name}_full.pkl", "wb"))
+    pickle.dump(model, open(f"../output/xgb_{model_name}_{fold}_full.pkl", "wb"))
     return
 
     # model.fit(X_train, y_train) #, eval_set=[(X_test, y_test)], early_stopping_rounds=20, verbose=True)
@@ -189,27 +188,36 @@ def check_corr(sub1, sub2):
 
 def combine_submissions():
     sources = [
-        ('submission_one_model_resnet50_avg_1.csv', 0.5),
-        ('submission_one_model_resnet50_avg_4.csv', 0.5)
+        ('submission_one_model_resnet50_avg_1.csv', 1.0/3),
+        ('submission_one_model_resnet50_avg_4.csv', 1.0/3),
+        ('submission_one_model_resnet50_2.csv', 1.0/3),
     ]
     ds = pd.read_csv(config.SUBMISSION_FORMAT)
     for src_fn, weight in sources:
         src = pd.read_csv('../submissions/'+src_fn)
         for col in ds.columns[1:]:
             ds[col] += src[col]*weight
-    ds.to_csv(f'../submissions/submission_3_resnet_folds_1_4.csv', index=False, float_format='%.7f')
-
+    ds.to_csv(f'../submissions/submission_5_resnet_folds_1_2_4.csv', index=False, float_format='%.7f')
 
 
 if __name__ == '__main__':
-    # model_xgboost(model_name='resnet50_avg_4', load_cache=True)
-    # model_xgboost(model_name='resnet50_avg_1', load_cache=False)
+    with utils.timeit_context('train xgboost model'):
+        pass
+        # model_xgboost(model_name='resnet50_avg_4', load_cache=True)
+        # model_xgboost(model_name='resnet50_avg_1', load_cache=False)
+        # model_xgboost(model_name='resnet50_2', load_cache=False)
+        model_xgboost(model_name='inception_v3_avg', fold=3, load_cache=False)
 
     # predict_on_test('resnet50_avg', 1, use_cache=True)
     # predict_on_test('resnet50_avg', 4, use_cache=True)
-    check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_one_model_resnet50_avg_4.csv')
-    combine_submissions()
-    check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_3_resnet_folds_1_4.csv')
+    # predict_on_test('resnet50', 2, use_cache=False)
+    # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_one_model_resnet50_avg_4.csv')
+    # combine_submissions()
+    # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_3_resnet_folds_1_4.csv')
+    # check_corr('submission_one_model_resnet50_2.csv', 'submission_3_resnet_folds_1_4.csv')
+    # check_corr('submission_one_model_resnet50_2.csv', 'submission_one_model_resnet50_avg_1.csv')
+    # combine_submissions()
+    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_3_resnet_folds_1_4.csv')
 
 
 
