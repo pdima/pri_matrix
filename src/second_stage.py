@@ -95,7 +95,7 @@ def avg_probabilities():
     return data.mean(axis=0)
 
 
-def model_xgboost(model_name, fold, load_cache=True):
+def try_train_model_xgboost(model_name, fold, load_cache=True):
     with utils.timeit_context('load data'):
         cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_cache.npz'
         raw_cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_raw_cache.npz'
@@ -111,14 +111,8 @@ def model_xgboost(model_name, fold, load_cache=True):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y_cat, test_size=0.25, random_state=42)
 
-    model = XGBClassifier(n_estimators=500, objective='multi:softprob', silent=False)
-    model.fit(X, y_cat)  # , eval_set=[(X_test, y_test)], early_stopping_rounds=20, verbose=True)
-    pickle.dump(model, open(f"../output/xgb_{model_name}_{fold}_full.pkl", "wb"))
-    return
-
-    # model.fit(X_train, y_train) #, eval_set=[(X_test, y_test)], early_stopping_rounds=20, verbose=True)
-    # pickle.dump(model, open(f"../output/xgb_{model_name}.pkl", "wb"))
-    # model = pickle.load(open(f"../output/xgb_{model_name}.pkl", "rb"))
+    model = XGBClassifier(n_estimators=500, objective='multi:softprob', silent=True)
+    model.fit(X, y_cat, eval_set=[(X_test, y_test)], early_stopping_rounds=20, verbose=True)
 
     # model = ExtraTreesClassifier(n_estimators=500, max_features=32)
     # pickle.dump(model, open(f"../output/et_{model_name}.pkl", "wb"))
@@ -129,7 +123,8 @@ def model_xgboost(model_name, fold, load_cache=True):
     # model.fit(X_train, y_train)
 
     prediction = model.predict_proba(X_test)
-
+    if prediction.shape[1] == 23: # insert mission lion col
+        prediction = np.insert(prediction, obj=12, values=0.0, axis=1)
     print(model.score(X_test, y_test))
 
     y_test_one_hot = np.eye(24)[y_test]
@@ -144,6 +139,25 @@ def model_xgboost(model_name, fold, load_cache=True):
     avg_pred = np.repeat([avg_prob], y_test_one_hot.shape[0], axis=0)
     print(metrics.pri_matrix_loss(y_test_one_hot, avg_pred))
     print(metrics.pri_matrix_loss(y_test_one_hot, avg_pred*0.1 + prediction*0.9))
+
+
+def model_xgboost(model_name, fold, load_cache=True):
+    with utils.timeit_context('load data'):
+        cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_cache.npz'
+        raw_cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_raw_cache.npz'
+        X, y, video_ids = load_train_data(f'../output/prediction_train_frames/{model_name}_{fold}/',
+                                          load_cache=load_cache,
+                                          cache_fn=cache_fn,
+                                          load_raw_cache=True,
+                                          raw_cache_fn=raw_cache_fn)
+
+    y_cat = np.argmax(y, axis=1)
+    print(X.shape, y.shape)
+    print(np.unique(y_cat))
+
+    model = XGBClassifier(n_estimators=500, objective='multi:softprob', silent=True)
+    model.fit(X, y_cat)  # , eval_set=[(X_test, y_test)], early_stopping_rounds=20, verbose=True)
+    pickle.dump(model, open(f"../output/xgb_{model_name}_{fold}_full.pkl", "wb"))
 
 
 def predict_on_test(model_name, fold, use_cache=False):
@@ -188,29 +202,41 @@ def check_corr(sub1, sub2):
 
 def combine_submissions():
     sources = [
-        ('submission_one_model_resnet50_avg_1.csv', 1.0/3),
-        ('submission_one_model_resnet50_avg_4.csv', 1.0/3),
-        ('submission_one_model_resnet50_2.csv', 1.0/3),
+        ('submission_one_model_resnet50_avg_1.csv', 4),
+        ('submission_one_model_resnet50_2.csv', 4),
+        ('submission_one_model_resnet50_avg_3.csv', 3),
+        ('submission_one_model_resnet50_avg_4.csv', 4),
     ]
+    total_weight = sum([s[1] for s in sources])
     ds = pd.read_csv(config.SUBMISSION_FORMAT)
     for src_fn, weight in sources:
         src = pd.read_csv('../submissions/'+src_fn)
         for col in ds.columns[1:]:
-            ds[col] += src[col]*weight
-    ds.to_csv(f'../submissions/submission_5_resnet_folds_1_2_4.csv', index=False, float_format='%.7f')
+            ds[col] += src[col]*weight/total_weight
+    ds.to_csv(f'../submissions/submission_8_resnet_folds_1_2_3_4.csv', index=False, float_format='%.7f')
 
 
 if __name__ == '__main__':
     with utils.timeit_context('train xgboost model'):
         pass
-        # model_xgboost(model_name='resnet50_avg_4', load_cache=True)
-        # model_xgboost(model_name='resnet50_avg_1', load_cache=False)
-        # model_xgboost(model_name='resnet50_2', load_cache=False)
-        model_xgboost(model_name='inception_v3_avg', fold=3, load_cache=False)
+        # model_xgboost(model_name='resnet50_avg', fold=4, load_cache=False)
+        # model_xgboost(model_name='resnet50_avg', fold=1, load_cache=False)
+        # model_xgboost(model_name='resnet50', fold=2, load_cache=False)
+        # model_xgboost(model_name='inception_v3_avg', fold=3, load_cache=False)
+        # model_xgboost(model_name='resnet50_avg', fold=3, load_cache=False)
+        # try_train_model_xgboost(model_name='inception_v3_avg', fold=3, load_cache=True)
+        # try_train_model_xgboost(model_name='inception_v3_avg_m8', fold=3, load_cache=True)
+        # model_xgboost(model_name='inception_v3_avg_m8', fold=3, load_cache=True)
+        model_xgboost(model_name='inception_v3_avg_m8', fold=2, load_cache=False)
 
-    # predict_on_test('resnet50_avg', 1, use_cache=True)
-    # predict_on_test('resnet50_avg', 4, use_cache=True)
+    # predict_on_test('resnet50_avg', 1, use_cache=False)
+    # predict_on_test('resnet50_avg', 4, use_cache=False)
     # predict_on_test('resnet50', 2, use_cache=False)
+    # predict_on_test('inception_v3_avg', 3, use_cache=False)
+    # predict_on_test('resnet50_avg', 3, use_cache=False)
+    # predict_on_test('inception_v3_avg_m8', 3, use_cache=False)
+    # predict_on_test('inception_v3_avg_m8', 2, use_cache=False)
+
     # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_one_model_resnet50_avg_4.csv')
     # combine_submissions()
     # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_3_resnet_folds_1_4.csv')
@@ -218,6 +244,11 @@ if __name__ == '__main__':
     # check_corr('submission_one_model_resnet50_2.csv', 'submission_one_model_resnet50_avg_1.csv')
     # combine_submissions()
     # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_3_resnet_folds_1_4.csv')
+    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_one_model_inception_v3_avg_3.csv')
+    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_one_model_resnet50_avg_3.csv')
+    # check_corr('submission_one_model_inception_v3_avg_3.csv', 'submission_one_model_resnet50_avg_3.csv')
+    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
+    check_corr('submission_one_model_inception_v3_avg_m8_3.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
 
 
 
