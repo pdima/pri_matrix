@@ -71,3 +71,7 @@ sub 4, single model/fold, resnet50 fold 2
 sub 9, single model/fold, inception v3 unfrozen extra layers till m8, fold 3
 sub 10, single model/fold, inception v3 unfrozen extra layers till m8, fold 2
 sub 11, inception v3 m8, fold2*0.5 + fold3*0.5
+sub 12, resnet50 all, inc_v3m8 2,3
+
+
+
