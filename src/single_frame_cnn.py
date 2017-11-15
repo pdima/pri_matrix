@@ -15,7 +15,7 @@ from tensorflow.python.keras.applications.xception import preprocess_input as pr
 from tensorflow.python.keras.applications.inception_v3 import preprocess_input as preprocess_input_inception_v3
 
 from tensorflow.python.keras.callbacks import ModelCheckpoint, TensorBoard, LearningRateScheduler
-from tensorflow.python.keras.layers import Dense, GlobalMaxPooling1D, GlobalAveragePooling1D
+from tensorflow.python.keras.layers import Dense, Dropout, GlobalMaxPooling1D, GlobalAveragePooling1D
 from tensorflow.python.keras.layers import GlobalMaxPooling2D, GlobalAveragePooling2D, AveragePooling2D
 from tensorflow.python.keras.layers import GlobalMaxPooling3D, GlobalAveragePooling3D
 from tensorflow.python.keras.layers import Input, Lambda, Reshape, TimeDistributed
@@ -24,6 +24,9 @@ from tensorflow.python.keras.models import Model
 from tensorflow.python.keras.optimizers import SGD, Adam, RMSprop
 from tensorflow.python.keras.regularizers import l1
 from sklearn.model_selection import train_test_split
+
+from inception_resnet_v2 import InceptionResNetV2
+from inception_resnet_v2 import preprocess_input as preprocess_input_inception_resnet_v2
 
 from multiprocessing.pool import ThreadPool
 import concurrent.futures
@@ -78,12 +81,23 @@ def build_model_resnet50_avg(lock_base_model: True):
 
 
 def build_model_xception(lock_base_model: True):
-    base_model = ResNet50(input_shape=INPUT_SHAPE, include_top=False, pooling=None)
+    base_model = Xception(input_shape=INPUT_SHAPE, include_top=False, pooling=None)
     if lock_base_model:
         for layer in base_model.layers:
             layer.trainable = False
     x = AveragePooling2D((5, 5), name='avg_pool5', strides=1)(base_model.layers[-2].output)
     x = GlobalMaxPooling2D()(x)
+    res = Dense(NB_CLASSES, activation='sigmoid', name='classes', kernel_initializer='zero', kernel_regularizer=l1(1e-5))(x)
+    model = Model(inputs=base_model.inputs, outputs=res)
+    return model
+
+
+def build_model_xception_avg(lock_base_model: True):
+    base_model = Xception(input_shape=INPUT_SHAPE, include_top=False, pooling=None)
+    if lock_base_model:
+        for layer in base_model.layers:
+            layer.trainable = False
+    x = GlobalAveragePooling2D(name='avg_pool_final')(base_model.layers[-1].output)
     res = Dense(NB_CLASSES, activation='sigmoid', name='classes', kernel_initializer='zero', kernel_regularizer=l1(1e-5))(x)
     model = Model(inputs=base_model.inputs, outputs=res)
     return model
@@ -102,33 +116,78 @@ def build_model_inception_v3_avg(lock_base_model: True):
     return model
 
 
-ModelInfo = namedtuple('ModelInfo', ['factory', 'preprocess_input', 'input_shape', 'unlock_layer_name'])
+def build_model_inception_v2_resnet(lock_base_model: True):
+    img_input = Input(shape=INPUT_SHAPE)
+    base_model = InceptionResNetV2(input_tensor=img_input, include_top=False, pooling='avg')
+    if lock_base_model:
+        for layer in base_model.layers:
+            layer.trainable = False
+    # base_model.summary()
+    res = Dense(NB_CLASSES, activation='sigmoid', name='classes', kernel_initializer='zero', kernel_regularizer=l1(1e-5))(base_model.layers[-1].output)
+    model = Model(inputs=img_input, outputs=res)
+    model.summary()
+    return model
+
+
+def build_model_inception_v3_dropout(lock_base_model: True):
+    base_model = InceptionV3(input_shape=INPUT_SHAPE, include_top=False, pooling=None)
+    if lock_base_model:
+        for layer in base_model.layers:
+            layer.trainable = False
+    # base_model.summary()
+    x = GlobalAveragePooling2D(name='avg_pool_final')(base_model.layers[-1].output)
+    x = Dropout(0.25)(x)
+    res = Dense(NB_CLASSES, activation='sigmoid', name='classes', kernel_initializer='zero', kernel_regularizer=l1(1e-5))(x)
+    model = Model(inputs=base_model.inputs, outputs=res)
+    # model.summary()
+    return model
+
+
+ModelInfo = namedtuple('ModelInfo', ['factory', 'preprocess_input', 'input_shape', 'unlock_layer_name', 'batch_size'])
 
 MODELS = {
     'resnet50': ModelInfo(
         factory=build_model_resnet50,
         preprocess_input=preprocess_input_resnet50,
         input_shape=(404, 720, 3),
-        unlock_layer_name='activation_22'
+        unlock_layer_name='activation_22',
+        batch_size=32
     ),
     'resnet50_avg': ModelInfo(
         factory=build_model_resnet50_avg,
         preprocess_input=preprocess_input_resnet50,
         input_shape=(404, 720, 3),
-        unlock_layer_name='activation_22'
+        unlock_layer_name='activation_22',
+        batch_size=32
     ),
     'inception_v3_avg': ModelInfo(
         factory=build_model_inception_v3_avg,
         preprocess_input=preprocess_input_inception_v3,
         input_shape=(404, 720, 3),
-        unlock_layer_name='mixed9'
+        unlock_layer_name='mixed9',
+        batch_size=32
     ),
     'inception_v3_avg_m8': ModelInfo(
         factory=build_model_inception_v3_avg,
         preprocess_input=preprocess_input_inception_v3,
         input_shape=(404, 720, 3),
-        unlock_layer_name='mixed8'
-    )
+        unlock_layer_name='mixed8',
+        batch_size=32
+    ),
+    'inception_v2_resnet': ModelInfo(
+        factory=build_model_inception_v2_resnet,
+        preprocess_input=preprocess_input_inception_v3,
+        input_shape=(404, 720, 3),
+        unlock_layer_name='activation_75',
+        batch_size=4
+    ),
+    'xception_avg': ModelInfo(
+        factory=build_model_xception_avg,
+        preprocess_input=preprocess_input_xception,
+        input_shape=(404, 720, 3),
+        unlock_layer_name='block4_pool',
+        batch_size=16
+    ),
 }
 
 
@@ -341,8 +400,8 @@ def train_initial(fold, model_name, use_non_blank_frames):
     # model.summary()
     dataset = SingleFrameCNNDataset(preprocess_input_func=model_info.preprocess_input,
                                     fold=fold,
-                                    batch_size=32,
-                                    validation_batch_size=16,
+                                    batch_size=model_info.batch_size,
+                                    validation_batch_size=model_info.batch_size,
                                     use_non_blank_frames=use_non_blank_frames)
 
     tensorboard_dir = f'../output/tensorboard/{model_name}_initial_fold_{fold}'
@@ -374,13 +433,13 @@ def train_continue(fold, model_name, weights, initial_epoch, use_non_blank_frame
     else:
         model.load_weights(weights)
 
-    # model.summary()
+    model.summary()
     model.compile(optimizer=RMSprop(lr=3e-4), loss='binary_crossentropy', metrics=['accuracy'])
 
     dataset = SingleFrameCNNDataset(preprocess_input_func=model_info.preprocess_input,
                                     fold=fold,
-                                    batch_size=32,
-                                    validation_batch_size=16,
+                                    batch_size=model_info.batch_size,
+                                    validation_batch_size=model_info.batch_size,
                                     use_non_blank_frames=use_non_blank_frames)
 
     checkpoints_dir = f'../output/checkpoints/{model_name}_fold_{fold}'
@@ -392,9 +451,9 @@ def train_continue(fold, model_name, weights, initial_epoch, use_non_blank_frame
         if epoch < 5:
             return 1e-4
         if epoch < 10:
-            return 3e-5
-        if epoch < 15:
             return 5e-5
+        if epoch < 15:
+            return 3e-5
         return 3e-5
 
     checkpoint_periodical = ModelCheckpoint(checkpoints_dir + "/checkpoint-{epoch:03d}-{val_loss:.4f}.hdf5",
