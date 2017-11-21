@@ -54,6 +54,7 @@ python3.6 single_frame_cnn.py train_initial --fold 2 --model xception_avg --use_
 
 
 # checkpoint to try with exception:
+# ../output/checkpoints/xception_avg_fold_4/checkpoint-004-0.1665.hdf5
 # ../output/checkpoints/xception_avg_fold_3/checkpoint-007-0.0319.hdf5
 # ../output/checkpoints/xception_avg_fold_2/checkpoint-005-0.0308.hdf5
 # ../output/checkpoints/xception_avg_fold_1/checkpoint-004-0.1295.hdf5
@@ -72,6 +73,9 @@ sub 9, single model/fold, inception v3 unfrozen extra layers till m8, fold 3
 sub 10, single model/fold, inception v3 unfrozen extra layers till m8, fold 2
 sub 11, inception v3 m8, fold2*0.5 + fold3*0.5
 sub 12, resnet50 all, inc_v3m8 2,3
-
-
-
+sub 13, xception avg fold 1 weights from checkpoint-004-0.1295, 0.017872
+sub 14, xception avg fold 3 weights from checkpoint-007-0.0319, 0.016991
+sub 15, xception avg fold 4 weights from checkpoint-004-0.1665, 0.017902
+sub 16, xception avg fold 2 weights from checkpoint-005-0.0308, 0.017231
+sub 17, combined, 0.014923
+sub 18, inception resnet v2, fold 2 from checkpoint-005-0.1555,

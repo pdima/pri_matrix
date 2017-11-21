@@ -206,6 +206,10 @@ def combine_submissions():
         ('submission_one_model_resnet50_2.csv', 4),
         ('submission_one_model_resnet50_avg_3.csv', 3),
         ('submission_one_model_resnet50_avg_4.csv', 4),
+        ('submission_one_model_xception_avg_1.csv', 4.0),
+        ('submission_one_model_xception_avg_2.csv', 4.0),
+        ('submission_one_model_xception_avg_3.csv', 4.0),
+        ('submission_one_model_xception_avg_4.csv', 4.0),
         ('submission_one_model_inception_v3_avg_m8_2.csv', 2),
         ('submission_one_model_inception_v3_avg_m8_3.csv', 2),
     ]
@@ -215,7 +219,7 @@ def combine_submissions():
         src = pd.read_csv('../submissions/'+src_fn)
         for col in ds.columns[1:]:
             ds[col] += src[col]*weight/total_weight
-    ds.to_csv(f'../submissions/submission_12_resnet_all_inception_v3_2_3.csv', index=False, float_format='%.7f')
+    ds.to_csv('../submissions/submission_17_resnet_all_xception_all_inception_v3_2_3.csv', index=False, float_format='%.7f')
 
 
 if __name__ == '__main__':
@@ -230,6 +234,11 @@ if __name__ == '__main__':
         # try_train_model_xgboost(model_name='inception_v3_avg_m8', fold=3, load_cache=True)
         # model_xgboost(model_name='inception_v3_avg_m8', fold=3, load_cache=True)
         # model_xgboost(model_name='inception_v3_avg_m8', fold=2, load_cache=False)
+        # model_xgboost(model_name='xception_avg', fold=1, load_cache=False)
+        # model_xgboost(model_name='xception_avg', fold=2, load_cache=False)
+        # model_xgboost(model_name='xception_avg', fold=3, load_cache=False)
+        # model_xgboost(model_name='xception_avg', fold=4, load_cache=False)
+        model_xgboost(model_name='inception_v2_resnet', fold=2, load_cache=False)
 
     # predict_on_test('resnet50_avg', 1, use_cache=False)
     # predict_on_test('resnet50_avg', 4, use_cache=False)
@@ -238,8 +247,13 @@ if __name__ == '__main__':
     # predict_on_test('resnet50_avg', 3, use_cache=False)
     # predict_on_test('inception_v3_avg_m8', 3, use_cache=False)
     # predict_on_test('inception_v3_avg_m8', 2, use_cache=False)
+    # predict_on_test('xception_avg', 1, use_cache=False)
+    # predict_on_test('xception_avg', 2, use_cache=False)
+    # predict_on_test('xception_avg', 3, use_cache=False)
+    # predict_on_test('xception_avg', 4, use_cache=False)
+    predict_on_test('inception_v2_resnet', 2, use_cache=False)
 
-    combine_submissions()
+    # combine_submissions()
     # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_one_model_resnet50_avg_4.csv')
     # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_3_resnet_folds_1_4.csv')
     # check_corr('submission_one_model_resnet50_2.csv', 'submission_3_resnet_folds_1_4.csv')
@@ -250,7 +264,11 @@ if __name__ == '__main__':
     # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_one_model_resnet50_avg_3.csv')
     # check_corr('submission_one_model_inception_v3_avg_3.csv', 'submission_one_model_resnet50_avg_3.csv')
     # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    check_corr('submission_one_model_inception_v3_avg_m8_2.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-
+    # check_corr('submission_one_model_inception_v3_avg_m8_2.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
+    # check_corr('submission_one_model_xception_avg_1.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
+    # check_corr('submission_one_model_xception_avg_3.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
+    # check_corr('submission_one_model_xception_avg_4.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
+    # check_corr('submission_17_resnet_all_xception_all_inception_v3_2_3.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
+    check_corr('submission_one_model_inception_v2_resnet_2.csv', 'submission_17_resnet_all_xception_all_inception_v3_2_3.csv')
 
 
