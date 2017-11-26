@@ -200,6 +200,12 @@ MODELS = {
     ),
 }
 
+# extra names used for different checkpoints, ideas/etc
+MODELS['inception_v3_avg_m8_ch2'] = MODELS['inception_v3_avg_m8']
+MODELS['inception_v3_avg_m8_ch5'] = MODELS['inception_v3_avg_m8']
+MODELS['inception_v3_avg_m8_ch9'] = MODELS['inception_v3_avg_m8']
+MODELS['inception_v3_avg_m8_ch24'] = MODELS['inception_v3_avg_m8']
+
 
 class SingleFrameCNNDataset:
     def __init__(self, fold, preprocess_input_func, batch_size, validation_batch_size=1, use_non_blank_frames=False):
@@ -465,8 +471,8 @@ def train_continue(fold, model_name, weights, initial_epoch, use_non_blank_frame
             return 1e-4
         if epoch < 9:
             return 5e-5
-        if epoch < 15:
-            return 3e-5
+        # if epoch < 15:
+        #     return 3e-5
         return 3e-5
 
     checkpoint_periodical = ModelCheckpoint(checkpoints_dir + "/checkpoint-{epoch:03d}-{val_loss:.4f}.hdf5",
@@ -479,7 +485,7 @@ def train_continue(fold, model_name, weights, initial_epoch, use_non_blank_frame
     model.fit_generator(
         dataset.generate(),
         steps_per_epoch=dataset.train_steps_per_epoch(),
-        epochs=20,
+        epochs=30,
         verbose=1,
         validation_data=dataset.generate_test(),
         validation_steps=dataset.validation_steps(),
