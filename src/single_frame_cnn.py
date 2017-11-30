@@ -430,91 +430,75 @@ def check_generator(use_test):
             plt.show()
 
 
-def train_initial(fold, model_name, use_non_blank_frames):
+def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
     model_info = MODELS[model_name]
-    model = model_info.factory(lock_base_model=True)
-    model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+    print(model_name, weights, initial_epoch)
 
-    # model.summary()
     dataset = SingleFrameCNNDataset(preprocess_input_func=model_info.preprocess_input,
                                     fold=fold,
                                     batch_size=model_info.batch_size,
                                     validation_batch_size=model_info.batch_size,
                                     use_non_blank_frames=use_non_blank_frames)
 
-    tensorboard_dir = f'../output/tensorboard/{model_name}_initial_fold_{fold}'
-    os.makedirs(tensorboard_dir, exist_ok=True)
-
-    model.fit_generator(
-        dataset.generate(),
-        steps_per_epoch=dataset.train_steps_per_epoch(),
-        epochs=1,
-        verbose=1,
-        validation_data=dataset.generate_test(),
-        validation_steps=dataset.validation_steps(),
-        callbacks=[
-            # TensorBoard(tensorboard_dir, histogram_freq=1, write_graph=False, write_images=True)
-        ]
-    )
-    model.save_weights(f'../output/{model_name}_s_initial_fold_{fold}_tf.h5')
-    last_w = model.layers[-1].get_weights()
-    np.save(f'../output/{model_name}_s_initial_fold_{fold}_tf_last_w.npy', last_w)
-
-
-def train_continue(fold, model_name, weights, initial_epoch, use_non_blank_frames):
-    model_info = MODELS[model_name]
     model = model_info.factory(lock_base_model=True)
-    utils.lock_layers_until(model, model_info.unlock_layer_name)
-    if weights == '':
-        w = np.load(f'../output/{model_name}_s_initial_fold_{fold}_tf_last_w.npy')
-        model.layers[-1].set_weights(w)
+    if initial_epoch == 0 and weights == '':
+        # train the first layer first unless continue training
+        model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+        model.summary()
+        model.fit_generator(
+            dataset.generate(),
+            steps_per_epoch=dataset.train_steps_per_epoch(),
+            epochs=1,
+            verbose=1)
     else:
+        print('load weights', weights)
         model.load_weights(weights)
 
+    utils.lock_layers_until(model, model_info.unlock_layer_name)
     # model.summary()
-    model.compile(optimizer=RMSprop(lr=3e-4), loss='binary_crossentropy', metrics=['accuracy'])
-
-    dataset = SingleFrameCNNDataset(preprocess_input_func=model_info.preprocess_input,
-                                    fold=fold,
-                                    batch_size=model_info.batch_size,
-                                    validation_batch_size=model_info.batch_size,
-                                    use_non_blank_frames=use_non_blank_frames)
 
     checkpoints_dir = f'../output/checkpoints/{model_name}_fold_{fold}'
     tensorboard_dir = f'../output/tensorboard/{model_name}_fold_{fold}'
     os.makedirs(checkpoints_dir, exist_ok=True)
     os.makedirs(tensorboard_dir, exist_ok=True)
 
-    def cheduler(epoch):
-        if epoch < 5:
-            return 1e-4
-        if epoch < 9:
-            return 5e-5
-        # if epoch < 15:
-        #     return 3e-5
-        return 3e-5
-
-    checkpoint_periodical = ModelCheckpoint(checkpoints_dir + "/checkpoint-{epoch:03d}-{val_loss:.4f}.hdf5",
+    checkpoint_periodical = ModelCheckpoint(checkpoints_dir + "/checkpoint-{epoch:03d}-{loss:.4f}-{val_loss:.4f}.hdf5",
                                             verbose=1,
                                             save_weights_only=True,
                                             period=1)
     tensorboard = TensorBoard(tensorboard_dir, histogram_freq=0, write_graph=False, write_images=False)
-    lr_sched = LearningRateScheduler(schedule=cheduler)
 
+    if initial_epoch < 5:
+        model.compile(optimizer=SGD(lr=1e-4, momentum=0.9), loss='binary_crossentropy', metrics=['accuracy'])
+        model.fit_generator(
+            dataset.generate(),
+            steps_per_epoch=dataset.train_steps_per_epoch(),
+            epochs=5,
+            verbose=1,
+            validation_data=dataset.generate_test(),
+            validation_steps=dataset.validation_steps(),
+            callbacks=[
+                checkpoint_periodical,
+                tensorboard
+            ],
+            initial_epoch=initial_epoch
+        )
+
+    model.compile(optimizer=Adam(lr=5e-5), loss='binary_crossentropy', metrics=['accuracy'])
     model.fit_generator(
         dataset.generate(),
         steps_per_epoch=dataset.train_steps_per_epoch(),
-        epochs=30,
+        epochs=10,
         verbose=1,
         validation_data=dataset.generate_test(),
         validation_steps=dataset.validation_steps(),
         callbacks=[
             checkpoint_periodical,
-            tensorboard,
-            lr_sched
+            tensorboard
         ],
-        initial_epoch=initial_epoch
+        initial_epoch=max(initial_epoch, 5)
     )
+
     model.save_weights(f'../output/{model_name}_s_fold_{fold}.h5')
 
 
@@ -535,6 +519,7 @@ def check_model(model_name, weights, fold):
         batch_id += 1
         for batch_frame in range(dataset.batch_size):
             plt.imshow(utils.preprocessed_input_to_img_resnet(X[batch_frame]))
+            # plt.imshow(X[batch_frame]/2.0+0.5)
             plt.show()
 
 
@@ -735,14 +720,12 @@ if __name__ == '__main__':
         check_model(model_name=model, weights=args.weights, fold=args.fold)
     elif action == 'check_model_score':
         check_model_score(model_name=model, weights=args.weights, fold=args.fold)
-    elif action == 'train_initial':
-        train_initial(fold=args.fold, model_name=model, use_non_blank_frames=args.use_non_blank_frames)
-    elif action == 'train_continue':
-        train_continue(fold=args.fold,
-                       model_name=model,
-                       weights=args.weights,
-                       initial_epoch=args.initial_epoch,
-                       use_non_blank_frames=args.use_non_blank_frames)
+    elif action == 'train':
+        train(fold=args.fold,
+              model_name=model,
+              weights=args.weights,
+              initial_epoch=args.initial_epoch,
+              use_non_blank_frames=args.use_non_blank_frames)
     elif action == 'generate_prediction':
         generate_prediction(fold=args.fold, model_name=model, weights=args.weights)
     elif action == 'generate_prediction_test':
