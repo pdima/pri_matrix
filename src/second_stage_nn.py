@@ -110,7 +110,7 @@ def try_train_model_nn(model_name, fold, load_cache=True):
 
     model.fit(X_train, y_train,
               batch_size=batch_size,
-              epochs=256,
+              epochs=128,
               verbose=1,
               validation_data=[X_test, y_test],
               callbacks=[ReduceLROnPlateau(factor=0.2, verbose=True, min_lr=1e-6)])
@@ -165,13 +165,63 @@ def train_model_nn(model_name, fold, load_cache=True):
     model.save_weights(f"../output/nn1_{model_name}_{fold}_full.pkl")
 
 
-def predict_on_test(model_name, fold, use_cache=False):
+def train_model_nn_combined(combined_model_name, model_with_folds, load_cache=True):
+    X_combined = []
+    y_combined = []
+
+    for model_name, fold in model_with_folds:
+        with utils.timeit_context('load data'):
+            cache_fn = f'../output/prediction_train_frames/nn_{model_name}_{fold}_cache.npz'
+            raw_cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_raw_cache.npz'
+            X, y, video_ids = load_train_data(f'../output/prediction_train_frames/{model_name}_{fold}/',
+                                              load_cache=load_cache,
+                                              cache_fn=cache_fn,
+                                              load_raw_cache=True,
+                                              raw_cache_fn=raw_cache_fn)
+            X_combined.append(X)
+            y_combined.append(y)
+
+    X = np.row_stack(X_combined)
+    y = np.row_stack(y_combined)
+
+    print(X.shape, y.shape)
+    model = model_nn(input_size=X.shape[1])
+    model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+    model.summary()
+
+    batch_size = 64
+
+    def cheduler(epoch):
+        if epoch < 32:
+            return 1e-3
+        if epoch < 48:
+            return 4e-4
+        if epoch < 80:
+            return 1e-4
+        return 1e-5
+
+    model.fit(X, y,
+              batch_size=batch_size,
+              epochs=128,
+              verbose=1,
+              callbacks=[LearningRateScheduler(schedule=cheduler)])
+
+    model.save_weights(f"../output/nn1_{combined_model_name}_0_full.pkl")
+
+
+def predict_on_test(model_name, fold, use_cache=False, data_model_name=None, data_fold=None):
     ds = pd.read_csv(config.SUBMISSION_FORMAT)
     classes = list(ds.columns)[1:]
 
-    data_dir = f'../output/prediction_test_frames/{model_name}_{fold}/'
+    if data_model_name is None:
+        data_model_name = model_name
+
+    if data_fold is None:
+        data_fold = fold
+
+    data_dir = f'../output/prediction_test_frames/{data_model_name}_{data_fold}/'
     with utils.timeit_context('load data'):
-        cache_fn = f'../output/prediction_test_frames/nn_{model_name}_{fold}_cache.npy'
+        cache_fn = f'../output/prediction_test_frames/nn_{data_model_name}_{data_fold}_cache.npy'
         if use_cache:
             X = np.load(cache_fn)
         else:
@@ -189,7 +239,7 @@ def predict_on_test(model_name, fold, use_cache=False):
     for col, cls in enumerate(classes):
         ds[cls] = np.clip(prediction[:, col], 0.001, 0.999)
     os.makedirs('../submissions', exist_ok=True)
-    ds.to_csv(f'../submissions/submission_one_model_nn_{model_name}_{fold}.csv', index=False, float_format='%.7f')
+    ds.to_csv(f'../submissions/submission_one_model_nn_{model_name}_{data_fold}.csv', index=False, float_format='%.7f')
 
 
 def check_corr(sub1, sub2):
@@ -248,11 +298,17 @@ if __name__ == '__main__':
         # model_xgboost(model_name='inception_v2_resnet', fold=2, load_cache=False)
         # try_train_model_nn(model_name='inception_v2_resnet', fold=1, load_cache=True)
         # train_model_nn(model_name='inception_v2_resnet', fold=1, load_cache=True)
-        #try_train_model_nn(model_name='inception_v3_avg_m8_ch2', fold=1, load_cache=True)
-        #try_train_model_nn(model_name='inception_v3_avg_m8_ch5', fold=1, load_cache=True)
+        # try_train_model_nn(model_name='inception_v3_avg_m8_ch2', fold=1, load_cache=True)
+        # try_train_model_nn(model_name='inception_v3_avg_m8_ch5', fold=1, load_cache=True)
+        # try_train_model_nn(model_name='inception_v3_avg_m8_ch9', fold=1, load_cache=True)
+        # try_train_model_nn(model_name='inception_v3_avg_m8_ch24', fold=1, load_cache=True)
+        # train_model_nn(model_name='inception_v3_avg_m8_ch9', fold=1, load_cache=True)
 
         # train_model_nn(model_name='inception_v3_avg_m8_ch2', fold=1, load_cache=True)
-        train_model_nn(model_name='inception_v3_avg_m8_ch5', fold=1, load_cache=True)
+        # train_model_nn(model_name='inception_v3_avg_m8_ch5', fold=1, load_cache=True)
+        # train_model_nn(model_name='inception_v3_avg_m8_ch24', fold=1, load_cache=True)
+
+
 
     # predict_on_test('resnet50_avg', 1, use_cache=False)
     # predict_on_test('resnet50_avg', 4, use_cache=False)
@@ -271,8 +327,27 @@ if __name__ == '__main__':
     # predict_on_test('inception_v2_resnet', 1, use_cache=False)
 
     # predict_on_test(model_name='inception_v3_avg_m8_ch2', fold=1, use_cache=False)
-    predict_on_test(model_name='inception_v3_avg_m8_ch5', fold=1, use_cache=False)
+    # predict_on_test(model_name='inception_v3_avg_m8_ch5', fold=1, use_cache=False)
+    # predict_on_test(model_name='inception_v3_avg_m8_ch24', fold=1, use_cache=False)
 
+    # train_model_nn(model_name='xception_avg_ch10', fold=2, load_cache=True)
+    # predict_on_test(model_name='xception_avg_ch10', fold=2, use_cache=False)
+    # try_train_model_nn(model_name='xception_avg_ch10', fold=2, load_cache=True)
+
+    # train_model_nn_combined('xception_avg_combined',
+    #                         [('xception_avg', fold) for fold in [1, 2, 3, 4]],
+    #                         load_cache=True)
+
+    predict_on_test(model_name='xception_avg_combined', fold=0, use_cache=False,
+                    data_model_name='xception_avg', data_fold=2)
+
+
+    # for fold in range(1, 5):
+    #     train_model_nn(model_name='xception_avg', fold=fold, load_cache=True)
+    #     predict_on_test(model_name='xception_avg', fold=fold, use_cache=False)
+    #
+    # for fold in range(1, 5):
+    #     try_train_model_nn(model_name='xception_avg', fold=fold, load_cache=True)
     # combine_submissions()
     # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_one_model_resnet50_avg_4.csv')
     # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_3_resnet_folds_1_4.csv')

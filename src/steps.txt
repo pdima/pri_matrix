@@ -59,6 +59,9 @@ python3.6 single_frame_cnn.py train_initial --fold 2 --model xception_avg --use_
 # ../output/checkpoints/xception_avg_fold_2/checkpoint-005-0.0308.hdf5
 # ../output/checkpoints/xception_avg_fold_1/checkpoint-004-0.1295.hdf5
 
+# ch10 version:
+# ../output/checkpoints/xception_avg_fold_2/checkpoint-010-0.0272.hdf5
+# python3.6 single_frame_cnn.py generate_prediction --model xception_avg_ch10 --fold 2 --weights ../output/checkpoints/xception_avg_fold_2/checkpoint-010-0.0272.hdf5
 
 TODO: try
 python3.6 single_frame_cnn.py train_initial --fold 3 --model inception_v3_dropout --use_non_blank_frames;python3.6 single_frame_cnn.py train_continue --fold 3 --model inception_v3_dropout --use_non_blank_frames
@@ -89,6 +92,9 @@ python3.6 single_frame_cnn.py train_initial --fold 2 --model inception_v2_resnet
 python3.6 single_frame_cnn.py train_initial --fold 3 --model inception_v2_resnet --use_non_blank_frames;python3.6 single_frame_cnn.py train_continue --fold 3 --model inception_v2_resnet --use_non_blank_frames
 python3.6 single_frame_cnn.py train_initial --fold 4 --model inception_v2_resnet --use_non_blank_frames;python3.6 single_frame_cnn.py train_continue --fold 4 --model inception_v2_resnet --use_non_blank_frames
 
+# train resnet_152
+# checkpoints used:
+# ../output/checkpoints/resnet152_fold_2/checkpoint-010-0.0495-0.0379.hdf5
 
 #train parallel half size model:
 python3.6 paralel_cnn_tf.py train_initial --fold=1 --model resnet50_w8; python3.6 paralel_cnn_tf.py train_continue --fold=1 --model resnet50_w8
@@ -98,8 +104,9 @@ sub 1, single model/fold, resnet50_avg, fold1
 sub 2, single model/fold, resnet50_avg, fold4
 sub3: sub1*0.5 + sub2*0.5
 sub 4, single model/fold, resnet50 fold 2
-sub 9, single model/fold, inception v3 unfrozen extra layers till m8, fold 3
-sub 10, single model/fold, inception v3 unfrozen extra layers till m8, fold 2
+sub 6, inception v3, fold 3, 0.027731
+sub 9, single model/fold, inception v3 unfrozen extra layers till m8, fold 3, 0.023919
+sub 10, single model/fold, inception v3 unfrozen extra layers till m8, fold 2, 0.022907
 sub 11, inception v3 m8, fold2*0.5 + fold3*0.5
 sub 12, resnet50 all, inc_v3m8 2,3
 sub 13, xception avg fold 1 weights from checkpoint-004-0.1295, 0.017872
@@ -112,5 +119,16 @@ sub 19, inception resnet v2, fold 1 from checkpoint-005-0.0347, 0.018365
 sub 20, nn second stage single model, inception_resnet_v2, fold 1, 0.017789
 sub 21, avg nn and xgboost of inception resnet v2, fold 1, 0.017169
 sub 22, inception v3 m8 fold 1 ch 2, nn, 0.024537 (local 0.02354)
-sub 22, inception v3 m8 fold 1 ch 5, nn, 0.022643 (local 0.02083)
+sub 23, inception v3 m8 fold 1 ch 5, nn, 0.022643 (local 0.02083)
+sub 24, inception v3 m8 fold 1 ch 24, nn, 0.021478 (local 0.01781)
+sub 25, inception v3 m8 fold 1 ch 9, nn, 0.021380 (local 0.01959)
+
+
+sub 26, xception avg fold 2 weights from checkpoint-005-0.0308, nn, 0.017030  (local 0.015529)
+sub 27, xception avg fold 2 weights from checkpoint-010-0.0272, nn, 0.016623 (local 0.01414)
+sub 28, submission_one_model_nn_xception_avg_combined_2, nn 0.016792
+
+sub 29, xception avg fold 1 weights from checkpoint-004-0.1295, nn, 0.017987 (local 0.01718)
+sub 30, xception avg fold 3 weights from checkpoint-007-0.0319, nn, 0.016973 (local 0.01583)
+sub 31, xception avg fold 4 weights from checkpoint-004-0.1665, nn,
 
