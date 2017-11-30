@@ -27,6 +27,8 @@ from sklearn.model_selection import train_test_split
 
 from inception_resnet_v2 import InceptionResNetV2
 from inception_resnet_v2 import preprocess_input as preprocess_input_inception_resnet_v2
+from cnn_finetune import resnet_152
+# import inception_v4
 import metrics
 from tqdm import tqdm
 
@@ -60,7 +62,7 @@ CLASSES = ['bird', 'blank', 'cattle', 'chimpanzee', 'elephant', 'forest buffalo'
 NB_CLASSES = len(CLASSES)
 
 
-def build_model_resnet50(lock_base_model: True):
+def build_model_resnet50(lock_base_model: bool):
     base_model = ResNet50(input_shape=INPUT_SHAPE, include_top=False, pooling=None)
     if lock_base_model:
         for layer in base_model.layers:
@@ -73,7 +75,7 @@ def build_model_resnet50(lock_base_model: True):
     return model
 
 
-def build_model_resnet50_avg(lock_base_model: True):
+def build_model_resnet50_avg(lock_base_model: bool):
     base_model = ResNet50(input_shape=INPUT_SHAPE, include_top=False, pooling=None)
     if lock_base_model:
         for layer in base_model.layers:
@@ -85,7 +87,16 @@ def build_model_resnet50_avg(lock_base_model: True):
     return model
 
 
-def build_model_xception(lock_base_model: True):
+def build_model_resnet152(lock_base_model: bool):
+    model = resnet_152.resnet152_model(img_shape=INPUT_SHAPE, num_classes=NB_CLASSES)
+    if lock_base_model:
+        for layer in model.layers[:-1]:
+            layer.trainable = False
+    # model.summary()
+    return model
+
+
+def build_model_xception(lock_base_model: bool):
     base_model = Xception(input_shape=INPUT_SHAPE, include_top=False, pooling=None)
     if lock_base_model:
         for layer in base_model.layers:
@@ -98,7 +109,7 @@ def build_model_xception(lock_base_model: True):
     return model
 
 
-def build_model_xception_avg(lock_base_model: True):
+def build_model_xception_avg(lock_base_model: bool):
     base_model = Xception(input_shape=INPUT_SHAPE, include_top=False, pooling=None)
     if lock_base_model:
         for layer in base_model.layers:
@@ -198,6 +209,13 @@ MODELS = {
         unlock_layer_name='block4_pool',
         batch_size=16
     ),
+    'resnet152': ModelInfo(
+        factory=build_model_resnet152,
+        preprocess_input=preprocess_input_resnet50,
+        input_shape=(404, 720, 3),
+        unlock_layer_name='res3b7_relu',
+        batch_size=8
+    ),
 }
 
 # extra names used for different checkpoints, ideas/etc
@@ -205,6 +223,7 @@ MODELS['inception_v3_avg_m8_ch2'] = MODELS['inception_v3_avg_m8']
 MODELS['inception_v3_avg_m8_ch5'] = MODELS['inception_v3_avg_m8']
 MODELS['inception_v3_avg_m8_ch9'] = MODELS['inception_v3_avg_m8']
 MODELS['inception_v3_avg_m8_ch24'] = MODELS['inception_v3_avg_m8']
+MODELS['xception_avg_ch10'] = MODELS['xception_avg']
 
 
 class SingleFrameCNNDataset:
