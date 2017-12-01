@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pims
+import av
 import scipy.misc
 import tensorflow as tf
 from tensorflow.python.keras.applications import ResNet50, InceptionV3, Xception
@@ -602,7 +603,7 @@ def generate_prediction(model_name, weights, fold):
 
     pool = ThreadPool(8)
     prev_res = None
-    for batch in utils.chunks(test_clips, 16, add_empty=True):
+    for batch in utils.chunks(test_clips, 8, add_empty=True):
         if prev_res is not None:
             results = prev_res.get()
         else:
@@ -659,9 +660,73 @@ def generate_prediction_test(model_name, weights, fold):
 
     pool = ThreadPool(8)
     prev_res = None
-    for batch in utils.chunks(test_clips, 16, add_empty=True):
+    for batch in utils.chunks(test_clips, 8, add_empty=True):
         if prev_res is not None:
             results = prev_res.get()
+        else:
+            results = []
+        prev_res = pool.map_async(load_file, batch)
+        for video_id, X in results:
+            processed_files += 1
+            res_fn = output_dir + video_id + '.csv'
+            have_data_time = time.time()
+            prediction = model.predict(X, batch_size=4)
+
+            ds = pd.DataFrame(index=PREDICT_FRAMES,
+                              data=prediction,
+                              columns=CLASSES)
+            ds.to_csv(res_fn, index_label='frame', float_format='%.5f')
+            have_prediction_time = time.time()
+            prepare_ms = int((have_data_time - start_time) * 1000)
+            predict_ms = int((have_prediction_time - have_data_time) * 1000)
+            start_time = time.time()
+            print(f'{video_id}  {processed_files} prepared in {prepare_ms} predicted in {predict_ms}')
+
+
+def generate_prediction_unused(model_name, weights, fold):
+    model = MODELS[model_name].factory(lock_base_model=True)
+    model.load_weights(weights, by_name=True)
+
+    output_dir = f'../output/prediction_unused_frames/{model_name}_{fold}/'
+    os.makedirs(output_dir, exist_ok=True)
+
+    dataset = SingleFrameCNNDataset(preprocess_input_func=MODELS[model_name].preprocess_input,
+                                    batch_size=1,
+                                    validation_batch_size=1,
+                                    fold=fold)
+
+    # skip processed files
+    test_clips = os.listdir(config.UNUSED_VIDEO_DIR)
+    unprocessed_files = []
+
+    converted_files = set()
+    processed_files = 0
+    for video_id in test_clips:
+        res_fn = output_dir + video_id + '.csv'
+        if os.path.exists(res_fn):
+            processed_files += 1
+            converted_files.add(video_id)
+        else:
+            unprocessed_files.append(video_id)
+
+    test_clips = unprocessed_files
+
+    def load_file(video_id):
+        X = dataset.frames_from_video_clip(video_fn=os.path.join(config.UNUSED_VIDEO_DIR, video_id))
+        return video_id, X
+
+    start_time = time.time()
+
+    pool = ThreadPool(8)
+    prev_res = None
+    for batch in utils.chunks(test_clips, 4, add_empty=True):
+        if prev_res is not None:
+            try:
+                results = prev_res.get()
+            except av.AVError:
+                results = []
+            except IOError:
+                results = []
         else:
             results = []
         prev_res = pool.map_async(load_file, batch)
@@ -737,5 +802,7 @@ if __name__ == '__main__':
         generate_prediction(fold=args.fold, model_name=model, weights=args.weights)
     elif action == 'generate_prediction_test':
         generate_prediction_test(fold=args.fold, model_name=model, weights=args.weights)
+    elif action == 'generate_prediction_unused':
+        generate_prediction_unused(fold=args.fold, model_name=model, weights=args.weights)
     elif action == 'find_non_blank_frames':
         find_non_blank_frames(fold=args.fold, model_name=model)
