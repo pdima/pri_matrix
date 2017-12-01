@@ -167,6 +167,13 @@ def build_model_inception_v3_dropout(lock_base_model: True):
 ModelInfo = namedtuple('ModelInfo', ['factory', 'preprocess_input', 'input_shape', 'unlock_layer_name', 'batch_size'])
 
 MODELS = {
+    'resnet50_initial': ModelInfo(
+        factory=build_model_resnet50_avg,
+        preprocess_input=preprocess_input_resnet50,
+        input_shape=(404, 720, 3),
+        unlock_layer_name='activation_22',
+        batch_size=32
+    ),
     'resnet50': ModelInfo(
         factory=build_model_resnet50,
         preprocess_input=preprocess_input_resnet50,
