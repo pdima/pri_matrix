@@ -266,8 +266,10 @@ def combine_submissions():
         # ('submission_one_model_xception_avg_4.csv', 4.0),
         # ('submission_one_model_inception_v3_avg_m8_2.csv', 2),
         # ('submission_one_model_inception_v3_avg_m8_3.csv', 2),
-        ('submission_one_model_nn_inception_v2_resnet_1.csv', 2),
-        ('submission_one_model_inception_v2_resnet_1.csv', 2),
+        # ('submission_one_model_nn_inception_v2_resnet_1.csv', 2),
+        # ('submission_one_model_inception_v2_resnet_1.csv', 2),
+        ('submission_one_model_xception_avg_4.csv', 2),
+        ('submission_one_model_nn_xception_avg_4.csv', 2),
     ]
     total_weight = sum([s[1] for s in sources])
     ds = pd.read_csv(config.SUBMISSION_FORMAT)
@@ -275,7 +277,8 @@ def combine_submissions():
         src = pd.read_csv('../submissions/'+src_fn)
         for col in ds.columns[1:]:
             ds[col] += src[col]*weight/total_weight
-    ds.to_csv('../submissions/submission_21_avg_xgb_nn_inception_v2_resnet_1', index=False, float_format='%.7f')
+    # ds.to_csv('../submissions/submission_21_avg_xgb_nn_inception_v2_resnet_1', index=False, float_format='%.7f')
+    ds.to_csv('../submissions/submission_32_avg_xgb_nn_xception_4.csv', index=False, float_format='%.7f')
 
 
 if __name__ == '__main__':
@@ -338,8 +341,8 @@ if __name__ == '__main__':
     #                         [('xception_avg', fold) for fold in [1, 2, 3, 4]],
     #                         load_cache=True)
 
-    predict_on_test(model_name='xception_avg_combined', fold=0, use_cache=False,
-                    data_model_name='xception_avg', data_fold=2)
+    # predict_on_test(model_name='xception_avg_combined', fold=0, use_cache=False,
+    #                 data_model_name='xception_avg', data_fold=2)
 
 
     # for fold in range(1, 5):
@@ -367,7 +370,7 @@ if __name__ == '__main__':
     # check_corr('submission_one_model_inception_v2_resnet_2.csv', 'submission_17_resnet_all_xception_all_inception_v3_2_3.csv')
     # check_corr('submission_one_model_inception_v2_resnet_1.csv', 'submission_17_resnet_all_xception_all_inception_v3_2_3.csv')
     # check_corr('submission_one_model_inception_v2_resnet_1.csv', 'submission_one_model_inception_v2_resnet_2.csv')
-    # combine_submissions()
+    combine_submissions()
     # check_corr('submission_one_model_nn_inception_v2_resnet_1.csv', 'submission_one_model_inception_v2_resnet_1.csv')
 
 
