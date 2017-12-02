@@ -176,7 +176,7 @@ MODELS = {
         batch_size=32
     ),
     'resnet50': ModelInfo(
-        factory=build_model_resnet50,
+        factory=build_model_resnet50_avg,
         preprocess_input=preprocess_input_resnet50,
         input_shape=(404, 720, 3),
         unlock_layer_name='activation_22',
@@ -189,18 +189,11 @@ MODELS = {
         unlock_layer_name='activation_22',
         batch_size=32
     ),
-    'inception_v3_avg': ModelInfo(
+    'inception_v3': ModelInfo(
         factory=build_model_inception_v3_avg,
         preprocess_input=preprocess_input_inception_v3,
         input_shape=(404, 720, 3),
-        unlock_layer_name='mixed9',
-        batch_size=32
-    ),
-    'inception_v3_avg_m8': ModelInfo(
-        factory=build_model_inception_v3_avg,
-        preprocess_input=preprocess_input_inception_v3,
-        input_shape=(404, 720, 3),
-        unlock_layer_name='mixed8',
+        unlock_layer_name='mixed4',
         batch_size=32
     ),
     'inception_v2_resnet': ModelInfo(
@@ -227,10 +220,10 @@ MODELS = {
 }
 
 # extra names used for different checkpoints, ideas/etc
-MODELS['inception_v3_avg_m8_ch2'] = MODELS['inception_v3_avg_m8']
-MODELS['inception_v3_avg_m8_ch5'] = MODELS['inception_v3_avg_m8']
-MODELS['inception_v3_avg_m8_ch9'] = MODELS['inception_v3_avg_m8']
-MODELS['inception_v3_avg_m8_ch24'] = MODELS['inception_v3_avg_m8']
+# MODELS['inception_v3_avg_m8_ch2'] = MODELS['inception_v3_avg_m8']
+# MODELS['inception_v3_avg_m8_ch5'] = MODELS['inception_v3_avg_m8']
+# MODELS['inception_v3_avg_m8_ch9'] = MODELS['inception_v3_avg_m8']
+# MODELS['inception_v3_avg_m8_ch24'] = MODELS['inception_v3_avg_m8']
 MODELS['xception_avg_ch10'] = MODELS['xception_avg']
 
 
@@ -463,7 +456,7 @@ def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
         model.load_weights(weights)
 
     utils.lock_layers_until(model, model_info.unlock_layer_name)
-    # model.summary()
+    model.summary()
 
     checkpoints_dir = f'../output/checkpoints/{model_name}_fold_{fold}'
     tensorboard_dir = f'../output/tensorboard/{model_name}_fold_{fold}'
@@ -476,12 +469,14 @@ def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
                                             period=1)
     tensorboard = TensorBoard(tensorboard_dir, histogram_freq=0, write_graph=False, write_images=False)
 
-    if initial_epoch < 5:
+    # SGD with lr=1e-4 seems to be training very slowly, but still keep it for initial weights adjustments
+    nb_sgd_epoch = 2
+    if initial_epoch < nb_sgd_epoch:
         model.compile(optimizer=SGD(lr=1e-4, momentum=0.9), loss='binary_crossentropy', metrics=['accuracy'])
         model.fit_generator(
             dataset.generate(),
             steps_per_epoch=dataset.train_steps_per_epoch(),
-            epochs=5,
+            epochs=nb_sgd_epoch,
             verbose=1,
             validation_data=dataset.generate_test(),
             validation_steps=dataset.validation_steps(),
@@ -504,7 +499,7 @@ def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
             checkpoint_periodical,
             tensorboard
         ],
-        initial_epoch=max(initial_epoch, 5)
+        initial_epoch=max(initial_epoch, nb_sgd_epoch)
     )
 
     model.save_weights(f'../output/{model_name}_s_fold_{fold}.h5')

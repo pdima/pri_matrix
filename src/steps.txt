@@ -130,5 +130,6 @@ sub 28, submission_one_model_nn_xception_avg_combined_2, nn 0.016792
 
 sub 29, xception avg fold 1 weights from checkpoint-004-0.1295, nn, 0.017987 (local 0.01718)
 sub 30, xception avg fold 3 weights from checkpoint-007-0.0319, nn, 0.016973 (local 0.01583)
-sub 31, xception avg fold 4 weights from checkpoint-004-0.1665, nn,
+sub 31, xception avg fold 4 weights from checkpoint-004-0.1665, nn, 0.017683 (local 0.01800)
+sub 32 avg xception fold 4 nn+xgboost 0.017164
 
