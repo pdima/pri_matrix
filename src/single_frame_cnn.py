@@ -225,6 +225,7 @@ MODELS = {
 # MODELS['inception_v3_avg_m8_ch9'] = MODELS['inception_v3_avg_m8']
 # MODELS['inception_v3_avg_m8_ch24'] = MODELS['inception_v3_avg_m8']
 MODELS['xception_avg_ch10'] = MODELS['xception_avg']
+MODELS['inception_v2_resnet_ch10'] = MODELS['inception_v2_resnet']
 
 
 class SingleFrameCNNDataset:
@@ -445,7 +446,7 @@ def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
     if initial_epoch == 0 and weights == '':
         # train the first layer first unless continue training
         model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
-        model.summary()
+        # model.summary()
         model.fit_generator(
             dataset.generate(),
             steps_per_epoch=dataset.train_steps_per_epoch(),
@@ -456,7 +457,7 @@ def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
         model.load_weights(weights)
 
     utils.lock_layers_until(model, model_info.unlock_layer_name)
-    model.summary()
+    # model.summary()
 
     checkpoints_dir = f'../output/checkpoints/{model_name}_fold_{fold}'
     tensorboard_dir = f'../output/tensorboard/{model_name}_fold_{fold}'

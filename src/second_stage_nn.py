@@ -310,6 +310,8 @@ if __name__ == '__main__':
         # train_model_nn(model_name='inception_v3_avg_m8_ch2', fold=1, load_cache=True)
         # train_model_nn(model_name='inception_v3_avg_m8_ch5', fold=1, load_cache=True)
         # train_model_nn(model_name='inception_v3_avg_m8_ch24', fold=1, load_cache=True)
+        #try_train_model_nn(model_name='resnet152', fold=2, load_cache=True)
+        #train_model_nn(model_name='resnet152', fold=2, load_cache=True)
 
 
 
@@ -343,7 +345,36 @@ if __name__ == '__main__':
 
     # predict_on_test(model_name='xception_avg_combined', fold=0, use_cache=False,
     #                 data_model_name='xception_avg', data_fold=2)
+    # predict_on_test(model_name='resnet152', fold=2, use_cache=False)
+    #train_model_nn(model_name='inception_v3', fold=1, load_cache=True)
+    #train_model_nn(model_name='inception_v2_resnet', fold=3, load_cache=True)
+    #train_model_nn(model_name='inception_v2_resnet', fold=4, load_cache=True)
+    #predict_on_test(model_name='inception_v3', fold=1, use_cache=False)
+    #predict_on_test(model_name='inception_v2_resnet', fold=3, use_cache=False)
+    #predict_on_test(model_name='inception_v2_resnet', fold=4, use_cache=False)
+    #try_train_model_nn(model_name='inception_v3', fold=1, load_cache=True)
+    #try_train_model_nn(model_name='inception_v2_resnet', fold=3, load_cache=True)
+    #try_train_model_nn(model_name='inception_v2_resnet', fold=4, load_cache=True)
+    
+    #train_model_nn(model_name='inception_v3', fold=2, load_cache=True)
+    #predict_on_test(model_name='inception_v3', fold=2, use_cache=False)
+    #train_model_nn(model_name='inception_v3', fold=4, load_cache=True)
+    #predict_on_test(model_name='inception_v3', fold=4, use_cache=False)
+    #try_train_model_nn(model_name='inception_v3', fold=2, load_cache=True)
+    #try_train_model_nn(model_name='inception_v3', fold=4, load_cache=True)
 
+    #train_model_nn(model_name='xception_avg_ch10', fold=1)
+    #predict_on_test(model_name='xception_avg_ch10', fold=1)
+    #try_train_model_nn(model_name='xception_avg_ch10', fold=1, load_cache=True)
+
+
+    #train_model_nn(model_name='inception_v2_resnet_ch10', fold=3)
+    #predict_on_test(model_name='inception_v2_resnet_ch10', fold=3)
+    #try_train_model_nn(model_name='inception_v2_resnet_ch10', fold=3, load_cache=True)
+    
+    train_model_nn(model_name='resnet152', fold=3)
+    predict_on_test(model_name='resnet152', fold=3)
+    try_train_model_nn(model_name='resnet152', fold=3, load_cache=True)
 
     # for fold in range(1, 5):
     #     train_model_nn(model_name='xception_avg', fold=fold, load_cache=True)
@@ -370,7 +401,7 @@ if __name__ == '__main__':
     # check_corr('submission_one_model_inception_v2_resnet_2.csv', 'submission_17_resnet_all_xception_all_inception_v3_2_3.csv')
     # check_corr('submission_one_model_inception_v2_resnet_1.csv', 'submission_17_resnet_all_xception_all_inception_v3_2_3.csv')
     # check_corr('submission_one_model_inception_v2_resnet_1.csv', 'submission_one_model_inception_v2_resnet_2.csv')
-    combine_submissions()
+    # combine_submissions()
     # check_corr('submission_one_model_nn_inception_v2_resnet_1.csv', 'submission_one_model_inception_v2_resnet_1.csv')
 
 
