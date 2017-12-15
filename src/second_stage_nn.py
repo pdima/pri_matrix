@@ -281,6 +281,46 @@ def combine_submissions():
     ds.to_csv('../submissions/submission_32_avg_xgb_nn_xception_4.csv', index=False, float_format='%.7f')
 
 
+def train_combined_models():
+    train_model_nn_combined('resnet50_combined',
+                            [('resnet50', 2)] +
+                            [('resnet50_avg', fold) for fold in [1, 3, 4]],
+                            load_cache=True)
+
+    train_model_nn_combined('xception_avg_ch10_combined',
+                            [('xception_avg_ch10', fold) for fold in [1, 2, 3, 4]],
+                            load_cache=True)
+
+    train_model_nn_combined('inception_v3_combined',
+                            [('inception_v3', fold) for fold in [1, 2, 3, 4]],
+                            load_cache=True)
+
+
+def predict_unused_clips(data_model_name, data_fold, combined_model_name):
+    ds = pd.read_csv(config.SUBMISSION_FORMAT)
+    classes = list(ds.columns)[1:]
+
+    data_dir = f'../output/prediction_unused_frames/{data_model_name}_{data_fold}/'
+    video_ids = [fn[:-4] for fn in os.listdir(data_dir) if fn.endswith('.csv')]
+
+    with utils.timeit_context('load data'):
+        X = load_test_data(data_dir, video_ids)
+
+    model = model_nn(input_size=X.shape[1])
+    model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+    model.load_weights(f"../output/nn1_{combined_model_name}_0_full.pkl")
+
+    with utils.timeit_context('predict'):
+        prediction = model.predict(X)
+
+    ds = pd.DataFrame(data={'filename': video_ids})
+
+    for col, cls in enumerate(classes):
+        ds[cls] = prediction[:, col]  # np.clip(prediction[:, col], 0.001, 0.999)
+    # os.makedirs('../submissions', exist_ok=True)
+    ds.to_csv(f'../output/prediction_unused_frames/{data_model_name}_{data_fold}.csv', index=False, float_format='%.7f')
+
+
 if __name__ == '__main__':
     with utils.timeit_context('train nn model'):
         pass
@@ -372,9 +412,18 @@ if __name__ == '__main__':
     #predict_on_test(model_name='inception_v2_resnet_ch10', fold=3)
     #try_train_model_nn(model_name='inception_v2_resnet_ch10', fold=3, load_cache=True)
     
-    train_model_nn(model_name='resnet152', fold=3)
-    predict_on_test(model_name='resnet152', fold=3)
-    try_train_model_nn(model_name='resnet152', fold=3, load_cache=True)
+    # train_model_nn(model_name='resnet152', fold=3)
+    # predict_on_test(model_name='resnet152', fold=3)
+    # try_train_model_nn(model_name='resnet152', fold=3, load_cache=True)
+
+    # train_model_nn(model_name='xception_avg_ch10', fold=3)
+    # predict_on_test(model_name='xception_avg_ch10', fold=3)
+    #
+    # train_model_nn(model_name='xception_avg_ch10', fold=4)
+    # predict_on_test(model_name='xception_avg_ch10', fold=4)
+    #
+    # try_train_model_nn(model_name='xception_avg_ch10', fold=3, load_cache=True)
+    # try_train_model_nn(model_name='xception_avg_ch10', fold=4, load_cache=True)
 
     # for fold in range(1, 5):
     #     train_model_nn(model_name='xception_avg', fold=fold, load_cache=True)
@@ -404,4 +453,21 @@ if __name__ == '__main__':
     # combine_submissions()
     # check_corr('submission_one_model_nn_inception_v2_resnet_1.csv', 'submission_one_model_inception_v2_resnet_1.csv')
 
+    # train_combined_models()
+    # predict_unused_clips(data_model_name='resnet50_avg', data_fold=2, combined_model_name='resnet50_combined')
+    # predict_unused_clips(data_model_name='inception_v3', data_fold=1, combined_model_name='inception_v3_combined')
+    # predict_unused_clips(data_model_name='inception_v3', data_fold=2, combined_model_name='inception_v3_combined')
+    # predict_unused_clips(data_model_name='xception_avg', data_fold=1, combined_model_name='xception_avg_ch10_combined')
+    # predict_unused_clips(data_model_name='xception_avg', data_fold=2, combined_model_name='xception_avg_ch10_combined')
 
+    # train_model_nn(model_name='inception_v2_resnet_ch10', fold=1)
+    # predict_on_test(model_name='inception_v2_resnet_ch10', fold=1)
+    # try_train_model_nn(model_name='inception_v2_resnet_ch10', fold=1, load_cache=True)
+    #
+    # train_model_nn(model_name='inception_v2_resnet_ch10', fold=2)
+    # try_train_model_nn(model_name='inception_v2_resnet_ch10', fold=2, load_cache=True)
+    #
+    # train_model_nn(model_name='inception_v2_resnet_ch10', fold=4)
+    # try_train_model_nn(model_name='inception_v2_resnet_ch10', fold=4, load_cache=True)
+
+    predict_on_test(model_name='inception_v2_resnet_ch10', fold=4)
