@@ -29,7 +29,6 @@ from sklearn.model_selection import train_test_split
 from inception_resnet_v2 import InceptionResNetV2
 from inception_resnet_v2 import preprocess_input as preprocess_input_inception_resnet_v2
 from cnn_finetune import resnet_152
-# import inception_v4
 import metrics
 from tqdm import tqdm
 
@@ -226,10 +225,14 @@ MODELS = {
 # MODELS['inception_v3_avg_m8_ch24'] = MODELS['inception_v3_avg_m8']
 MODELS['xception_avg_ch10'] = MODELS['xception_avg']
 MODELS['inception_v2_resnet_ch10'] = MODELS['inception_v2_resnet']
+MODELS['inception_v2_resnet_extra'] = MODELS['inception_v2_resnet']
 
 
 class SingleFrameCNNDataset:
-    def __init__(self, fold, preprocess_input_func, batch_size, validation_batch_size=1, use_non_blank_frames=False):
+    def __init__(self, fold, preprocess_input_func, batch_size,
+                 validation_batch_size=1,
+                 use_non_blank_frames=False,
+                 use_extra_clips=False):
         self.validation_batch_size = validation_batch_size
         self.batch_size = batch_size
         self.combine_batches = 1  # combine multiple batches in generator for parallel processing
@@ -252,6 +255,19 @@ class SingleFrameCNNDataset:
 
         self.test_clips = self.test_clips[:self.validation_steps() * validation_batch_size]
         self.pool = ThreadPool(8)
+
+        self.use_extra_clips = use_extra_clips
+        self.extra_matching_clips = []
+        if use_extra_clips:
+            self.extra_matching_clips_ds = pd.read_csv('../output/unused_matching.csv')
+            self.extra_matching_clips = list(self.extra_matching_clips_ds.filename)
+            self.extra_matching_clips_ds = self.extra_matching_clips_ds.set_index('filename')
+
+            self.extra_labeled_clips_ds = pd.read_csv('../output/unused_labeled.csv')
+            self.extra_labeled_clips = list(self.extra_labeled_clips_ds.filename)
+            self.extra_labeled_clips_ds = self.extra_labeled_clips_ds.set_index('filename')
+            print('extra matching clips:', len(self.extra_matching_clips))
+            print('extra labeled clips:', len(self.extra_labeled_clips))
 
         print('train clips:', len(self.train_clips))
         print('test clips:', len(self.test_clips))
@@ -297,18 +313,68 @@ class SingleFrameCNNDataset:
         # else:
         #     X = X.astype(np.float32)
         # del v
+
+        if video_id.startswith('labeled_'):
+            video_id = video_id[len('labeled_'):]
+            images_dir = config.UNUSED_IMG_DIR
+            video_dir = config.UNUSED_VIDEO_DIR
+            classes = self.extra_labeled_clips_ds.loc[[video_id]].as_matrix(columns=CLASSES)
+        elif video_id.startswith('matching_'):
+            video_id = video_id[len('matching_'):]
+            images_dir = config.UNUSED_IMG_DIR
+            video_dir = config.UNUSED_VIDEO_DIR
+            classes = self.extra_matching_clips_ds.loc[[video_id]].as_matrix(columns=CLASSES)
+        else:
+            images_dir = config.TRAIN_IMG_DIR
+            video_dir = config.RAW_VIDEO_DIR
+            classes = self.training_set_labels_ds.loc[[video_id]].as_matrix(columns=CLASSES)
+
         base_name = video_id[:-4]
-        fn = os.path.join(config.TRAIN_IMG_DIR, base_name, f'{offset+1:04}.jpg')
-        X = scipy.misc.imread(fn).astype(np.float32)
+
+        loaded = False
+        try:
+            fn = os.path.join(images_dir, base_name, f'{offset+1:04}.jpg')
+            X = scipy.misc.imread(fn).astype(np.float32)
+            loaded = True
+        except FileNotFoundError:
+            pass
+
+        # if not loaded:
+        #     try:
+        #         offset = 4
+        #         fn = os.path.join(images_dir, base_name, f'{offset+1:04}.jpg')
+        #         X = scipy.misc.imread(fn).astype(np.float32)
+        #         loaded = True
+        #     except FileNotFoundError:
+        #         pass
+
+        if not loaded:
+            v = pims.Video(os.path.join(video_dir, video_id))
+            X = np.zeros(INPUT_SHAPE)
+            while offset >= 0:
+                try:
+                    X = v[(offset+1)*12]
+                    break
+                except IndexError:
+                    offset -= 1
+            if X.shape != INPUT_SHAPE:
+                X = scipy.misc.imresize(X, size=(INPUT_ROWS, INPUT_COLS), interp='bilinear').astype(np.float32)
+            X = X.astype(np.float32)
+            del v
+
         if hflip:
             X = X[:, ::-1]
         # utils.print_stats('X', X)
-        classes = self.training_set_labels_ds.loc[[video_id]].as_matrix(columns=CLASSES)
         return self.preprocess_input_func(X), classes[0]
 
     def choose_train_video_id(self):
         while True:
-            if np.random.choice([True, False]):
+            r = np.random.random()
+            if r < 0.04:
+                return 'labeled_'+np.random.choice(self.extra_labeled_clips)
+            if r < 0.2:
+                return 'matching_' + np.random.choice(self.extra_matching_clips)
+            if r < 0.6:
                 return np.random.choice(self.train_clips)
             else:
                 cls = np.random.randint(0, NB_CLASSES)
@@ -432,7 +498,7 @@ def check_generator(use_test):
             plt.show()
 
 
-def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
+def train(fold, model_name, weights, initial_epoch, use_non_blank_frames, use_extra_clips):
     model_info = MODELS[model_name]
     print(model_name, weights, initial_epoch)
 
@@ -440,7 +506,8 @@ def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
                                     fold=fold,
                                     batch_size=model_info.batch_size,
                                     validation_batch_size=model_info.batch_size,
-                                    use_non_blank_frames=use_non_blank_frames)
+                                    use_non_blank_frames=use_non_blank_frames,
+                                    use_extra_clips=use_extra_clips)
 
     model = model_info.factory(lock_base_model=True)
     if initial_epoch == 0 and weights == '':
@@ -459,8 +526,12 @@ def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
     utils.lock_layers_until(model, model_info.unlock_layer_name)
     # model.summary()
 
-    checkpoints_dir = f'../output/checkpoints/{model_name}_fold_{fold}'
-    tensorboard_dir = f'../output/tensorboard/{model_name}_fold_{fold}'
+    suffix = ''
+    if use_extra_clips:
+        suffix = '_extra'
+
+    checkpoints_dir = f'../output/checkpoints/{model_name}_fold_{fold}{suffix}'
+    tensorboard_dir = f'../output/tensorboard/{model_name}_fold_{fold}{suffix}'
     os.makedirs(checkpoints_dir, exist_ok=True)
     os.makedirs(tensorboard_dir, exist_ok=True)
 
@@ -492,7 +563,7 @@ def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
     model.fit_generator(
         dataset.generate(),
         steps_per_epoch=dataset.train_steps_per_epoch(),
-        epochs=10,
+        epochs=15,
         verbose=1,
         validation_data=dataset.generate_test(),
         validation_steps=dataset.validation_steps(),
@@ -503,7 +574,7 @@ def train(fold, model_name, weights, initial_epoch, use_non_blank_frames):
         initial_epoch=max(initial_epoch, nb_sgd_epoch)
     )
 
-    model.save_weights(f'../output/{model_name}_s_fold_{fold}.h5')
+    model.save_weights(f'../output/{model_name}_s_fold_{fold}{suffix}.h5')
 
 
 def check_model(model_name, weights, fold):
@@ -715,7 +786,7 @@ def generate_prediction_unused(model_name, weights, fold):
 
     pool = ThreadPool(8)
     prev_res = None
-    for batch in utils.chunks(test_clips, 4, add_empty=True):
+    for batch in utils.chunks(test_clips, 1, add_empty=True):
         if prev_res is not None:
             try:
                 results = prev_res.get()
@@ -775,6 +846,7 @@ if __name__ == '__main__':
     parser.add_argument('--fold', type=int, default=1)
     parser.add_argument('--model', type=str, default='resnet50')
     parser.add_argument('--use_non_blank_frames', action='store_true')
+    parser.add_argument('--use_extra_clips', action='store_true')
 
     args = parser.parse_args()
     action = args.action
@@ -793,7 +865,8 @@ if __name__ == '__main__':
               model_name=model,
               weights=args.weights,
               initial_epoch=args.initial_epoch,
-              use_non_blank_frames=args.use_non_blank_frames)
+              use_non_blank_frames=args.use_non_blank_frames,
+              use_extra_clips=args.use_extra_clips)
     elif action == 'generate_prediction':
         generate_prediction(fold=args.fold, model_name=model, weights=args.weights)
     elif action == 'generate_prediction_test':
