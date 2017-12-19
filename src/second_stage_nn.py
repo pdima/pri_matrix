@@ -90,6 +90,17 @@ def model_nn(input_size):
     return model
 
 
+def model_nn_combined(input_size):
+    input_data = Input(shape=(input_size,))
+    x = input_data
+    x = Dense(2048, activation='relu')(x)
+    x = Dropout(0.5)(x)
+    x = Dense(128, activation='relu')(x)
+    x = Dense(NB_CAT, activation='sigmoid', kernel_regularizer=l1(1e-5))(x)
+    model = Model(inputs=input_data, outputs=x)
+    return model
+
+
 def try_train_model_nn(model_name, fold, load_cache=True):
     with utils.timeit_context('load data'):
         cache_fn = f'../output/prediction_train_frames/nn_{model_name}_{fold}_cache.npz'
@@ -209,6 +220,94 @@ def train_model_nn_combined(combined_model_name, model_with_folds, load_cache=Tr
     model.save_weights(f"../output/nn1_{combined_model_name}_0_full.pkl")
 
 
+def train_all_models_nn_combined(combined_model_name, models_with_folds, load_cache=True):
+    X_all_combined = []
+    y_all_combined = []
+
+    for model_with_folds in models_with_folds:
+        X_combined = []
+        y_combined = []
+        for model_name, fold in model_with_folds:
+            with utils.timeit_context('load data'):
+                cache_fn = f'../output/prediction_train_frames/nn_{model_name}_{fold}_cache.npz'
+                raw_cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_raw_cache.npz'
+                X, y, video_ids = load_train_data(f'../output/prediction_train_frames/{model_name}_{fold}/',
+                                                  load_cache=load_cache,
+                                                  cache_fn=cache_fn,
+                                                  load_raw_cache=True,
+                                                  raw_cache_fn=raw_cache_fn)
+                X_combined.append(X)
+                y_combined.append(y)
+
+        X_all_combined.append(np.row_stack(X_combined))
+        y_all_combined.append(np.row_stack(y_combined))
+
+    X = np.column_stack(X_all_combined)
+    y = y_all_combined[0]
+
+    print(X.shape, y.shape)
+    model = model_nn_combined(input_size=X.shape[1])
+    model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+    model.summary()
+
+    batch_size = 64
+
+    def cheduler(epoch):
+        if epoch < 32:
+            return 1e-3
+        if epoch < 48:
+            return 4e-4
+        if epoch < 80:
+            return 1e-4
+        return 1e-5
+
+    model.fit(X, y,
+              batch_size=batch_size,
+              epochs=128,
+              verbose=1,
+              callbacks=[LearningRateScheduler(schedule=cheduler)])
+
+    model.save_weights(f"../output/nn_{combined_model_name}_full.pkl")
+
+
+def predict_on_test_combined(combined_model_name, models_with_folds):
+    ds = pd.read_csv(config.SUBMISSION_FORMAT)
+    classes = list(ds.columns)[1:]
+    folds = [1, 2, 3, 4]
+
+    X_combined = {fold: [] for fold in folds}
+    # for model_with_folds in models_with_folds:
+    #     for data_model_name, data_fold in model_with_folds:
+    #         data_dir = f'../output/prediction_test_frames/{data_model_name}_{data_fold}/'
+    #         with utils.timeit_context('load data'):
+    #             X_combined[data_fold].append(load_test_data(data_dir, ds.filename))
+    #             # print(X_combined[-1].shape)
+    # pickle.dump(X_combined, open(f"../output/X_combined_{combined_model_name}.pkl", "wb"))
+
+    X_combined = pickle.load(open(f"../output/X_combined_{combined_model_name}.pkl", 'rb'))
+
+    model = model_nn_combined(input_size=np.column_stack(X_combined[1]).shape[1])
+    model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+    model.load_weights(f"../output/nn_{combined_model_name}_full.pkl")
+
+    predictions = []
+    with utils.timeit_context('predict'):
+        for fold in [1, 2, 3, 4]:
+            X = np.column_stack(X_combined[fold])
+            predictions.append(model.predict(X))
+
+    prediction = np.mean(np.array(predictions).astype(np.float64), axis=0)
+    os.makedirs('../submissions', exist_ok=True)
+
+    for clip10 in [5, 4, 3, 2]:
+        clip = 10 ** (-clip10)
+        for col, cls in enumerate(classes):
+            ds[cls] = np.clip(prediction[:, col]*(1-clip*2)+clip, clip, 1.0-clip)
+        ds.to_csv(f'../submissions/submission_combined_models_nn_{combined_model_name}_clip_{clip10}.csv',
+                  index=False,
+                  float_format='%.8f')
+
+
 def predict_on_test(model_name, fold, use_cache=False, data_model_name=None, data_fold=None):
     ds = pd.read_csv(config.SUBMISSION_FORMAT)
     classes = list(ds.columns)[1:]
@@ -294,6 +393,33 @@ def train_combined_models():
     train_model_nn_combined('inception_v3_combined',
                             [('inception_v3', fold) for fold in [1, 2, 3, 4]],
                             load_cache=True)
+
+
+def train_all_combined_models():
+    all_models = [
+         [('resnet50_avg', 1), ('resnet50', 2), ('resnet50_avg', 3), ('resnet50_avg', 4)],
+         [('xception_avg', fold) for fold in [1, 2, 3, 4]],
+         [('xception_avg_ch10', fold) for fold in [1, 2, 3, 4]],
+         [('inception_v3', fold) for fold in [1, 2, 3, 4]],
+         [('inception_v2_resnet', fold) for fold in [1, 2, 3, 4]],
+         [('inception_v2_resnet_ch10', fold) for fold in [1, 2, 3, 4]],
+         [('resnet152', fold) for fold in [1, 2, 3, 4]],
+     ]
+
+    train_all_models_nn_combined('models_all_combined1', all_models)
+
+
+def predict_all_combined_models():
+    all_models = [
+        [('resnet50_avg', 1), ('resnet50', 2), ('resnet50_avg', 3), ('resnet50_avg', 4)],
+        [('xception_avg', fold) for fold in [1, 2, 3, 4]],
+        [('xception_avg_ch10', fold) for fold in [1, 2, 3, 4]],
+        [('inception_v3', fold) for fold in [1, 2, 3, 4]],
+        [('inception_v2_resnet', fold) for fold in [1, 2, 3, 4]],
+        [('inception_v2_resnet_ch10', fold) for fold in [1, 2, 3, 4]],
+        [('resnet152', fold) for fold in [1, 2, 3, 4]],
+    ]
+    predict_on_test_combined('models_all_combined1', all_models)
 
 
 def predict_unused_clips(data_model_name, data_fold, combined_model_name):
@@ -470,4 +596,19 @@ if __name__ == '__main__':
     # train_model_nn(model_name='inception_v2_resnet_ch10', fold=4)
     # try_train_model_nn(model_name='inception_v2_resnet_ch10', fold=4, load_cache=True)
 
-    predict_on_test(model_name='inception_v2_resnet_ch10', fold=4)
+    # predict_on_test(model_name='inception_v2_resnet_ch10', fold=4)
+
+    # train_model_nn(model_name='resnet152', fold=1)
+    # predict_on_test(model_name='resnet152', fold=1)
+    #
+    # train_model_nn(model_name='resnet152', fold=4)
+    # predict_on_test(model_name='resnet152', fold=4)
+    #
+    # try_train_model_nn(model_name='resnet152', fold=1)
+    # try_train_model_nn(model_name='resnet152', fold=4)
+
+    # train_all_combined_models()
+    # predict_all_combined_models()
+    train_model_nn(model_name='inception_v2_resnet_extra', fold=3)
+    predict_on_test(model_name='inception_v2_resnet_extra', fold=3)
+    try_train_model_nn(model_name='inception_v2_resnet_extra', fold=3)
