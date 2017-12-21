@@ -838,6 +838,57 @@ def find_non_blank_frames(model_name, fold):
     pickle.dump(res, open(f"../output/prediction_train_frames/{model_name}_{fold}_non_blank.pkl", "wb"))
 
 
+def save_combined_train_results(model_name, fold, skip_existing=True):
+    X_raw = []
+    y = []
+    video_ids = []
+    train_path = f'../output/prediction_train_frames/{model_name}_{fold}/'
+    raw_cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_combined.npz'
+    for fn in tqdm(sorted(os.listdir(train_path))):
+        if not fn.endswith('csv'):
+            continue
+        ds = np.loadtxt(os.path.join(train_path, fn), delimiter=',', skiprows=1)
+
+        # top row is y, top col is frame number
+        X_raw.append(ds[1:, 1:])
+        y.append(ds[0, 1:])
+        video_ids.append(fn[:-4])
+
+    X_raw = np.array(X_raw)
+    y = np.array(y)
+    np.savez(raw_cache_fn, X_raw=X_raw, y=y, video_ids=video_ids)
+
+
+def save_combined_test_results(model_name, fold, skip_existing=True):
+    ds = pd.read_csv(config.SUBMISSION_FORMAT)
+    data_dir = f'../output/prediction_test_frames/{model_name}_{fold}/'
+    res_fn = f'../output/prediction_test_frames/{model_name}_{fold}_combined.npy'
+
+    if skip_existing and os.path.exists(res_fn):
+        print('skip existing', res_fn)
+        return
+
+    X_raw = []
+    for video_id in tqdm(ds.filename):
+        ds = np.loadtxt(os.path.join(data_dir, video_id+'.csv'), delimiter=',', skiprows=1)
+        # 0 col is frame number
+        X_raw.append(ds[:, 1:])
+    X_raw = np.array(X_raw).astype(np.float32)
+    np.save(res_fn, X_raw)
+
+
+def save_all_combined_test_results():
+    for models in config.ALL_MODELS:
+        for model, fold in models:
+            save_combined_test_results(model, fold)
+
+
+def save_all_combined_train_results():
+    for models in config.ALL_MODELS:
+        for model, fold in models:
+            save_combined_train_results(model, fold)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='parallel cnn')
     parser.add_argument('action', type=str, default='check_model')
@@ -875,3 +926,9 @@ if __name__ == '__main__':
         generate_prediction_unused(fold=args.fold, model_name=model, weights=args.weights)
     elif action == 'find_non_blank_frames':
         find_non_blank_frames(fold=args.fold, model_name=model)
+    elif action == 'save_combined_test_results':
+        save_combined_test_results(fold=args.fold, model_name=model)
+    elif action == 'save_all_combined_test_results':
+        save_all_combined_test_results()
+    elif action == 'save_all_combined_train_results':
+        save_all_combined_train_results()

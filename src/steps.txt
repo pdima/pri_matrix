@@ -134,3 +134,12 @@ sub 31, xception avg fold 4 weights from checkpoint-004-0.1665, nn, 0.017683 (lo
 sub 32 avg xception fold 4 nn+xgboost 0.017164
 
 sub 47 2k model combined_models_nn_models_all_combined1 clip 2
+
+sub 52, xgboost 2k all model inputs combined clip 4, 0.012829
+sub 52, nn combined folds inputs clip 4, 0.013513
+
+
+
+
+sudo apt install libavformat-dev libavcodec-dev libavdevice-dev libavfilter-dev libswscale-dev libavresample-dev
+

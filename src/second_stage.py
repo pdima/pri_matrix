@@ -8,10 +8,11 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import metrics
 import config
+from multiprocessing.pool import ThreadPool, Pool
 
 from sklearn.ensemble import ExtraTreesClassifier
 from xgboost import XGBClassifier
-from sklearn.svm import SVC
+import lightgbm as lgb
 
 NB_CAT = 24
 
@@ -35,56 +36,36 @@ def preprocess_x(data: np.ndarray):
     return np.array(rows)
 
 
-# def preprocess_x(data: np.ndarray):
-#     rows = []
-#     downsample = 4
-#     for row in data:
-#         items = []
-#         for col in range(row.shape[1]):
-#             sorted = np.sort(row[:, col])
-#             items.append(sorted.reshape(-1, downsample).mean(axis=1))
-#         rows.append(np.hstack(items))
-#     return np.array(rows)
+def load_train_data(model_name, fold, cache_prefix='xgb'):
+    data_path = '../output/prediction_train_frames'
+    cache_fn = f'{data_path}/{cache_prefix}_{model_name}_{fold}_cache.npz'
+    print(cache_fn, os.path.exists(cache_fn))
 
-
-def load_train_data(train_path, load_cache: bool, cache_fn: str, load_raw_cache: bool, raw_cache_fn: str):
-    if load_cache and os.path.exists(cache_fn):
+    if os.path.exists(cache_fn):
+        print('loading cache', cache_fn)
         cached = np.load(cache_fn)
+        print('loaded cache')
         X, y, video_ids = cached['X'], cached['y'], cached['video_ids']
     else:
-        if load_raw_cache and os.path.exists(raw_cache_fn):
-            cached = np.load(raw_cache_fn)
-            X_raw, y, video_ids = cached['X_raw'], cached['y'], cached['video_ids']
-        else:
-            X_raw = []
-            y = []
-            video_ids = []
-            for fn in tqdm(os.listdir(train_path)):
-                if not fn.endswith('csv'):
-                    continue
-                ds = np.loadtxt(os.path.join(train_path, fn), delimiter=',', skiprows=1)
-
-                # top row is y, top col is frame number
-                X_raw.append(ds[1:, 1:])
-                y.append(ds[0, 1:])
-                video_ids.append(fn[:-4])
-
-            X_raw = np.array(X_raw)
-            y = np.array(y)
-            np.savez(raw_cache_fn, X_raw=X_raw, y=y, video_ids=video_ids)
-
+        raw_cache_fn = f'{data_path}/{model_name}_{fold}_combined.npz'
+        print('loading raw cache', raw_cache_fn, os.path.exists(raw_cache_fn))
+        cached = np.load(raw_cache_fn)
+        X_raw, y, video_ids = cached['X_raw'], cached['y'], cached['video_ids']
         X = preprocess_x(X_raw)
         np.savez(cache_fn, X=X, y=y, video_ids=video_ids)
     return X, y, video_ids
 
 
-def load_test_data(test_path, video_ids):
-    X_raw = []
-    for video_id in tqdm(video_ids):
-        ds = np.loadtxt(os.path.join(test_path, video_id+'.csv'), delimiter=',', skiprows=1)
-        # 0 col is frame number
-        X_raw.append(ds[:, 1:])
-    X_raw = np.array(X_raw)
+def load_test_data(test_path, model_name, fold):
+    X_raw = np.load(f'{test_path}/{model_name}_{fold}_combined.npy')
+    X = preprocess_x(X_raw)
+    return X
+
+
+def load_test_data_from_std_path(model_name, fold):
+    test_path = '../output/prediction_test_frames'
+    X_raw = np.load(f'{test_path}/{model_name}_{fold}_combined.npy')
+    print('preprocess', model_name, fold)
     X = preprocess_x(X_raw)
     return X
 
@@ -95,15 +76,9 @@ def avg_probabilities():
     return data.mean(axis=0)
 
 
-def try_train_model_xgboost(model_name, fold, load_cache=True):
+def try_train_model_xgboost(model_name, fold):
     with utils.timeit_context('load data'):
-        cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_cache.npz'
-        raw_cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_raw_cache.npz'
-        X, y, video_ids = load_train_data(f'../output/prediction_train_frames/{model_name}_{fold}/',
-                                          load_cache=load_cache,
-                                          cache_fn=cache_fn,
-                                          load_raw_cache=True,
-                                          raw_cache_fn=raw_cache_fn)
+        X, y, video_ids = load_train_data(model_name, fold)
 
     y_cat = np.argmax(y, axis=1)
     print(X.shape, y.shape)
@@ -141,21 +116,15 @@ def try_train_model_xgboost(model_name, fold, load_cache=True):
     print(metrics.pri_matrix_loss(y_test_one_hot, avg_pred*0.1 + prediction*0.9))
 
 
-def model_xgboost(model_name, fold, load_cache=True):
+def model_xgboost(model_name, fold):
     with utils.timeit_context('load data'):
-        cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_cache.npz'
-        raw_cache_fn = f'../output/prediction_train_frames/{model_name}_{fold}_raw_cache.npz'
-        X, y, video_ids = load_train_data(f'../output/prediction_train_frames/{model_name}_{fold}/',
-                                          load_cache=load_cache,
-                                          cache_fn=cache_fn,
-                                          load_raw_cache=True,
-                                          raw_cache_fn=raw_cache_fn)
+        X, y, video_ids = load_train_data(model_name, fold)
 
     y_cat = np.argmax(y, axis=1)
     print(X.shape, y.shape)
     print(np.unique(y_cat))
 
-    model = XGBClassifier(n_estimators=1000, objective='multi:softprob', silent=True)
+    model = XGBClassifier(n_estimators=400, objective='multi:softprob', learning_rate=0.1, silent=True)
     model.fit(X, y_cat)  # , eval_set=[(X_test, y_test)], early_stopping_rounds=20, verbose=True)
     pickle.dump(model, open(f"../output/xgb_{model_name}_{fold}_full.pkl", "wb"))
 
@@ -167,13 +136,13 @@ def predict_on_test(model_name, fold, use_cache=False):
     classes = list(ds.columns)[1:]
     print(classes)
 
-    data_dir = f'../output/prediction_test_frames/{model_name}_{fold}/'
+    data_dir = f'../output/prediction_test_frames'
     with utils.timeit_context('load data'):
         cache_fn = f'../output/prediction_test_frames/{model_name}_{fold}_cache.npy'
         if use_cache:
             X = np.load(cache_fn)
         else:
-            X = load_test_data(data_dir, ds.filename)
+            X = load_test_data(data_dir, model_name, fold)
             np.save(cache_fn, X)
         print(X.shape)
     with utils.timeit_context('predict'):
@@ -187,6 +156,235 @@ def predict_on_test(model_name, fold, use_cache=False):
     os.makedirs('../submissions', exist_ok=True)
     ds.to_csv(f'../submissions/submission_one_model_{model_name}_{fold}.csv', index=False, float_format='%.7f')
 
+
+# def load_one_model(request):
+#     model_name, fold = request
+#     print('load', model_name, fold)
+#     X, y, video_ids = load_train_data(model_name, fold)
+#     return X, y, video_ids
+
+
+def train_all_models_xgboost_combined(combined_model_name, models_with_folds):
+    X_all_combined = []
+    y_all_combined = []
+
+    requests = []
+    results = []
+    for model_with_folds in models_with_folds:
+        for model_name, fold in model_with_folds:
+            requests.append((model_name, fold))
+            # results.append(load_one_model(requests[-1]))
+
+    pool = Pool(40)
+    with utils.timeit_context('load all data'):
+        results = pool.starmap(load_train_data, requests)
+
+    for model_with_folds in models_with_folds:
+        X_combined = []
+        y_combined = []
+        for model_name, fold in model_with_folds:
+            X, y, video_ids = results[requests.index((model_name, fold))]
+            print(model_name, fold, X.shape)
+            X_combined.append(X)
+            y_combined.append(y)
+
+        X_all_combined.append(np.row_stack(X_combined))
+        y_all_combined.append(np.row_stack(y_combined))
+
+    X = np.column_stack(X_all_combined)
+    y = y_all_combined[0]
+
+    print(X.shape, y.shape)
+
+    y_cat = np.argmax(y, axis=1)
+    print(X.shape, y.shape)
+    print(np.unique(y_cat))
+
+    model = XGBClassifier(n_estimators=1600, objective='multi:softprob', learning_rate=0.03, silent=False)
+    with utils.timeit_context('fit 1600 est'):
+        model.fit(X, y_cat)  # , eval_set=[(X_test, y_test)], early_stopping_rounds=20, verbose=True)
+    pickle.dump(model, open(f"../output/xgb_combined_{combined_model_name}.pkl", "wb"))
+
+
+def load_test_data_one_model(request):
+    data_dir, model_name, fold = request
+    return fold, load_test_data(data_dir, model_name, fold)
+
+
+def predict_on_test_combined(combined_model_name, models_with_folds):
+    ds = pd.read_csv(config.SUBMISSION_FORMAT)
+    classes = list(ds.columns)[1:]
+    folds = [1, 2, 3, 4]
+
+    X_combined = {fold: [] for fold in folds}
+    try:
+        X_combined = pickle.load(open(f"../output/X_combined_xgb_{combined_model_name}.pkl", 'rb'))
+    except FileNotFoundError:
+        requests = []
+
+        for model_with_folds in models_with_folds:
+            for data_model_name, data_fold in model_with_folds:
+                data_dir = f'../output/prediction_test_frames'
+                with utils.timeit_context('load data'):
+                    requests.append((data_dir, data_model_name, data_fold))
+                    # X_combined[data_fold].append(load_test_data(data_dir, ds.filename))
+                    # print(X_combined[-1].shape)
+        pool = Pool(40)
+        results = pool.map(load_test_data_one_model, requests)
+        for data_fold, X in results:
+            X_combined[data_fold].append(X)
+        pickle.dump(X_combined, open(f"../output/X_combined_xgb_{combined_model_name}.pkl", "wb"))
+
+    model = pickle.load(open(f"../output/xgb_combined_{combined_model_name}.pkl", "rb"))
+    print(model)
+
+    predictions = []
+    with utils.timeit_context('predict'):
+        for fold in [1, 2, 3, 4]:
+            X = np.column_stack(X_combined[fold])
+            predictions.append(model.predict_proba(X))
+            print('prediction', predictions[-1].shape)
+            
+    prediction = np.mean(np.array(predictions).astype(np.float64), axis=0)
+    os.makedirs('../submissions', exist_ok=True)
+    print('predictions', prediction.shape)
+
+    for clip10 in [5, 4, 3, 2]:
+        clip = 10 ** (-clip10)
+        for col, cls in enumerate(classes):
+            ds[cls] = np.clip(prediction[:, col]*(1-clip*2)+clip, clip, 1.0-clip)
+        ds.to_csv(f'../submissions/submission_combined_models_xgboost_{combined_model_name}_clip_{clip10}.csv',
+                  index=False,
+                  float_format='%.8f')
+
+
+def train_model_xgboost_combined_folds(combined_model_name, model_with_folds):
+    X_combined = []
+    y_combined = []
+
+    for model_name, fold in model_with_folds:
+        with utils.timeit_context('load data'):
+            X, y, video_ids = load_train_data(model_name, fold)
+            X_combined.append(X)
+            y_combined.append(y)
+
+    X = np.row_stack(X_combined)
+    y = np.row_stack(y_combined)
+
+    y_cat = np.argmax(y, axis=1)
+    print(X.shape, y.shape)
+    print(np.unique(y_cat))
+
+    model = XGBClassifier(n_estimators=500, objective='multi:softprob', learning_rate=0.1, silent=True)
+    with utils.timeit_context('fit 500 est'):
+        model.fit(X, y_cat)
+    pickle.dump(model, open(f"../output/xgb_combined_folds_{combined_model_name}.pkl", "wb"))
+
+
+def train_combined_folds_models():
+    for models in config.ALL_MODELS:
+        combined_model_name = models[0][0] + '_combined'
+        print('*' * 64)
+        print(combined_model_name)
+        print('*' * 64)
+        train_model_xgboost_combined_folds(combined_model_name, models)
+
+
+def predict_combined_folds_models():
+    ds = pd.read_csv(config.SUBMISSION_FORMAT)
+    classes = list(ds.columns)[1:]
+
+    total_weight = 0.0
+    result = np.zeros((ds.shape[0], NB_CAT))
+
+    pool = Pool(16)
+
+    for models in config.ALL_MODELS:
+        combined_model_name = models[0][0] + '_combined'
+
+        # def load_data(request):
+        #     model_name, fold = request
+        #     return load_test_data(data_dir, model_name, fold)
+
+        with utils.timeit_context('load 4 folds data'):
+            X_for_folds = pool.starmap(load_test_data_from_std_path, models)
+
+        model = pickle.load(open(f"../output/xgb_combined_folds_{combined_model_name}.pkl", "rb"))
+
+        for (model_name, fold), X in zip(models, X_for_folds):
+            with utils.timeit_context('predict'):
+                prediction = model.predict_proba(X)
+                weight = config.MODEL_WEIGHTS[model_name]
+                result += prediction*weight
+                total_weight += weight
+
+    os.makedirs('../submissions', exist_ok=True)
+    result /= total_weight
+
+    for clip10 in [5, 4, 3, 2]:
+        clip = 10 ** (-clip10)
+        for col, cls in enumerate(classes):
+            ds[cls] = np.clip(result[:, col] * (1 - clip * 2) + clip, clip, 1.0 - clip)
+        ds.to_csv(f'../submissions/submission_combined_folds_models_xgboost_clip_{clip10}.csv',
+                  index=False,
+                  float_format='%.8f')
+
+
+def train_all_single_fold_models():
+    for models in config.ALL_MODELS:
+        for model_name, fold in models:
+            weights_fn = f"../output/xgb_{model_name}_{fold}_full.pkl"
+            print(model_name, fold, weights_fn)
+            if os.path.exists(weights_fn):
+                print('skip existing file')
+            else:
+                with utils.timeit_context('train'):
+                    model_xgboost(model_name, fold)
+
+
+def predict_all_single_fold_models():
+    ds = pd.read_csv(config.SUBMISSION_FORMAT)
+    classes = list(ds.columns)[1:]
+
+    total_weight = 0.0
+    result = np.zeros((ds.shape[0], NB_CAT))
+
+    requests = []
+    for model_with_folds in config.ALL_MODELS:
+        for model_name, fold in model_with_folds:
+            requests.append((model_name, fold))
+    pool = Pool(8)
+    with utils.timeit_context('load all data'):
+        results = pool.starmap(load_test_data_from_std_path, requests)
+
+    for models in config.ALL_MODELS:
+        for model_name, fold in models:
+            model = pickle.load(open(f"../output/xgb_{model_name}_{fold}_full.pkl", "rb"))
+            print(model_name, fold, model)
+
+            with utils.timeit_context('load data'):
+                X = results[requests.index((model_name, fold))]
+                # X = load_test_data_from_std_path(model_name, fold)
+                print(X.shape)
+
+            with utils.timeit_context('predict'):
+                prediction = model.predict_proba(X)
+                if prediction.shape[1] == 23:
+                    prediction = np.insert(prediction, obj=12, values=0.0, axis=1)
+                weight = config.MODEL_WEIGHTS[model_name]
+                result += prediction * weight
+                total_weight += weight
+
+    os.makedirs('../submissions', exist_ok=True)
+    result /= total_weight
+
+    for clip10 in [5, 4, 3, 2]:
+        clip = 10 ** (-clip10)
+        for col, cls in enumerate(classes):
+            ds[cls] = np.clip(result[:, col] * (1 - clip * 2) + clip, clip, 1.0 - clip)
+        ds.to_csv(f'../submissions/submission_single_folds_models_xgboost_clip_{clip10}.csv',
+                  index=False,
+                  float_format='%.8f')
 
 def check_corr(sub1, sub2):
     print(sub1, sub2)
@@ -224,55 +422,11 @@ def combine_submissions():
 
 if __name__ == '__main__':
     with utils.timeit_context('train xgboost model'):
-        pass
-        # model_xgboost(model_name='resnet50_avg', fold=4, load_cache=False)
-        # model_xgboost(model_name='resnet50_avg', fold=1, load_cache=False)
-        # model_xgboost(model_name='resnet50', fold=2, load_cache=False)
-        # model_xgboost(model_name='inception_v3_avg', fold=3, load_cache=False)
-        # model_xgboost(model_name='resnet50_avg', fold=3, load_cache=False)
-        # try_train_model_xgboost(model_name='inception_v3_avg', fold=3, load_cache=True)
-        # try_train_model_xgboost(model_name='inception_v3_avg_m8', fold=3, load_cache=True)
-        # model_xgboost(model_name='inception_v3_avg_m8', fold=3, load_cache=True)
-        # model_xgboost(model_name='inception_v3_avg_m8', fold=2, load_cache=False)
-        # model_xgboost(model_name='xception_avg', fold=1, load_cache=False)
-        # model_xgboost(model_name='xception_avg', fold=2, load_cache=False)
-        # model_xgboost(model_name='xception_avg', fold=3, load_cache=False)
-        # model_xgboost(model_name='xception_avg', fold=4, load_cache=False)
-        model_xgboost(model_name='inception_v2_resnet', fold=1, load_cache=False)
-        # model_xgboost(model_name='inception_v2_resnet', fold=2, load_cache=False)
+        # train_all_models_xgboost_combined("2k_extra", models_with_folds=config.ALL_MODELS)
+        # predict_on_test_combined("2k_extra", models_with_folds=config.ALL_MODELS)
 
-    # predict_on_test('resnet50_avg', 1, use_cache=False)
-    # predict_on_test('resnet50_avg', 4, use_cache=False)
-    # predict_on_test('resnet50', 2, use_cache=False)
-    # predict_on_test('inception_v3_avg', 3, use_cache=False)
-    # predict_on_test('resnet50_avg', 3, use_cache=False)
-    # predict_on_test('inception_v3_avg_m8', 3, use_cache=False)
-    # predict_on_test('inception_v3_avg_m8', 2, use_cache=False)
-    # predict_on_test('xception_avg', 1, use_cache=False)
-    # predict_on_test('xception_avg', 2, use_cache=False)
-    # predict_on_test('xception_avg', 3, use_cache=False)
-    # predict_on_test('xception_avg', 4, use_cache=False)
-    predict_on_test('inception_v2_resnet', 1, use_cache=False)
-    # predict_on_test('inception_v2_resnet', 2, use_cache=False)
+        # train_combined_folds_models()
+        # predict_combined_folds_models()
 
-    # combine_submissions()
-    # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_one_model_resnet50_avg_4.csv')
-    # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_3_resnet_folds_1_4.csv')
-    # check_corr('submission_one_model_resnet50_2.csv', 'submission_3_resnet_folds_1_4.csv')
-    # check_corr('submission_one_model_resnet50_2.csv', 'submission_one_model_resnet50_avg_1.csv')
-    # combine_submissions()
-    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_3_resnet_folds_1_4.csv')
-    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_one_model_inception_v3_avg_3.csv')
-    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_one_model_resnet50_avg_3.csv')
-    # check_corr('submission_one_model_inception_v3_avg_3.csv', 'submission_one_model_resnet50_avg_3.csv')
-    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_one_model_inception_v3_avg_m8_2.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_one_model_xception_avg_1.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_one_model_xception_avg_3.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_one_model_xception_avg_4.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_17_resnet_all_xception_all_inception_v3_2_3.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_one_model_inception_v2_resnet_2.csv', 'submission_17_resnet_all_xception_all_inception_v3_2_3.csv')
-    check_corr('submission_one_model_inception_v2_resnet_1.csv', 'submission_17_resnet_all_xception_all_inception_v3_2_3.csv')
-    check_corr('submission_one_model_inception_v2_resnet_1.csv', 'submission_one_model_inception_v2_resnet_2.csv')
-
-
+        # train_all_single_fold_models()
+        predict_all_single_fold_models()
