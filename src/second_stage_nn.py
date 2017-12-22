@@ -38,7 +38,7 @@ def load_train_data(model_name, fold, cache_prefix='nn'):
     cache_fn = f'{data_path}/{cache_prefix}_{model_name}_{fold}_cache.npz'
     print(cache_fn, os.path.exists(cache_fn))
 
-    if False and os.path.exists(cache_fn):
+    if os.path.exists(cache_fn):
         print('loading cache', cache_fn)
         cached = np.load(cache_fn)
         print('loaded cache')
@@ -91,7 +91,7 @@ def model_nn_combined(input_size):
     input_data = Input(shape=(input_size,))
     x = input_data
     x = Dense(2048, activation='relu')(x)
-    x = Dropout(0.5)(x)
+    x = Dropout(0.75)(x)
     x = Dense(128, activation='relu')(x)
     x = Dense(NB_CAT, activation='sigmoid', kernel_regularizer=l1(1e-5))(x)
     model = Model(inputs=input_data, outputs=x)
@@ -287,11 +287,65 @@ def train_all_models_nn_combined(combined_model_name, models_with_folds):
 
     model.fit(X, y,
               batch_size=batch_size,
-              epochs=128,
+              epochs=80,
               verbose=1,
               callbacks=[LearningRateScheduler(schedule=cheduler)])
 
     model.save_weights(f"../output/nn_{combined_model_name}_full.pkl")
+
+
+def try_train_all_models_nn_combined(models_with_folds):
+    X_all_combined = []
+    y_all_combined = []
+
+    for model_with_folds in models_with_folds:
+        X_combined = []
+        y_combined = []
+        for model_name, fold in model_with_folds:
+            with utils.timeit_context('load data'):
+                X, y, video_ids = load_train_data(model_name, fold)
+                X_combined.append(X)
+                y_combined.append(y)
+
+        X_all_combined.append(np.row_stack(X_combined))
+        y_all_combined.append(np.row_stack(y_combined))
+
+    X = np.column_stack(X_all_combined)
+    y = y_all_combined[0]
+
+    print(X.shape, y.shape)
+    model = model_nn_combined(input_size=X.shape[1])
+    model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+    model.summary()
+
+    batch_size = 64
+
+    def cheduler(epoch):
+        if epoch < 32:
+            return 1e-3
+        if epoch < 48:
+            return 4e-4
+        if epoch < 80:
+            return 1e-4
+        return 1e-5
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
+
+    model.fit(X_train, y_train,
+              batch_size=batch_size,
+              epochs=128,
+              verbose=1,
+              validation_data=[X_test, y_test],
+              callbacks=[LearningRateScheduler(schedule=cheduler)])
+
+    prediction = model.predict(X_test)
+
+    print(y_test.shape, prediction.shape)
+    print(metrics.pri_matrix_loss(y_test, prediction))
+    print(metrics.pri_matrix_loss(y_test, np.clip(prediction, 0.001, 0.999)))
+    print(metrics.pri_matrix_loss(y_test, np.clip(prediction, 0.0001, 0.9999)))
+    delta = prediction - y_test
+    print(np.min(delta), np.max(delta), np.mean(np.abs(delta)), np.sum(np.abs(delta) > 0.5))
 
 
 def predict_on_test_combined(combined_model_name, models_with_folds):
@@ -374,12 +428,17 @@ def check_corr(sub1, sub2):
 def combine_submissions():
     for clip10 in [5, 4, 3]:
         sources = [
-            (f'submission_combined_models_nn_combined_extra_clip_{clip10}.csv', 4.0),
-            (f'submission_combined_folds_models_nn_clip_{clip10}.csv', 2.0),
-            (f'submission_single_folds_models_nn_clip_{clip10}.csv', 2.0),
-            (f'submission_combined_models_xgboost_2k_extra_clip_{clip10}.csv', 4.0),
-            (f'submission_combined_folds_models_xgboost_clip_{clip10}.csv', 2.0),
-            (f'submission_single_folds_models_xgboost_clip_{clip10}.csv', 2.0),
+            (f'submission_combined_models_nn_combined_extra_dr075_clip_{clip10}.csv', 12.0),
+            (f'submission_combined_folds_models_nn_clip_{clip10}.csv', 1.0),
+            (f'submission_single_folds_models_nn_clip_{clip10}.csv', 1.0),
+
+            (f'submission_combined_models_xgboost_2k_extra_clip_{clip10}.csv', 12.0),
+            (f'submission_combined_folds_models_xgboost_clip_{clip10}.csv', 1.0),
+            (f'submission_single_folds_models_xgboost_clip_{clip10}.csv', 1.0),
+
+            (f'submission_combined_models_lgb_all_combined_260_clip_{clip10}.csv', 12.0),
+            (f'submission_combined_folds_models_lgb_clip_{clip10}.csv', 1.0),
+            (f'submission_single_folds_models_lgb_clip_{clip10}.csv', 1.0),
         ]
         total_weight = sum([s[1] for s in sources])
         ds = pd.read_csv(config.SUBMISSION_FORMAT)
@@ -389,7 +448,7 @@ def combine_submissions():
             src = pd.read_csv('../submissions/'+src_fn)
             for col in ds.columns[1:]:
                 ds[col] += src[col]*weight/total_weight
-        ds.to_csv(f'../submissions/submission_56_avg_xgb_nn_all_422_clip_{clip10}.csv', index=False, float_format='%.8f')
+        ds.to_csv(f'../submissions/submission_58_avg_xgb_nn_lgb_all_12_1_1_clip_{clip10}.csv', index=False, float_format='%.8f')
 
 
 def train_combined_folds_models():
@@ -472,14 +531,17 @@ def predict_unused_clips(data_model_name, data_fold, combined_model_name):
 if __name__ == '__main__':
     with utils.timeit_context('train nn model'):
         pass
-        # train_all_models_nn_combined('combined_extra', config.ALL_MODELS)
-        # predict_on_test_combined('combined_extra', config.ALL_MODELS)
+        # try_train_all_models_nn_combined(config.ALL_MODELS)
+        # train_all_models_nn_combined('combined_extra_dr075', config.ALL_MODELS)
+        # predict_on_test_combined('combined_extra_dr075', config.ALL_MODELS)
         # train_combined_folds_models()
         # predict_combined_folds_models()
         # train_all_single_fold_models()
         # predict_all_single_fold_models()
 
         combine_submissions()
+
+        # try_train_model_nn(model_name='inception_v2_resnet_extra', fold=3)
 
         # model_xgboost(model_name='resnet50_avg', fold=4, load_cache=False)
         # model_xgboost(model_name='resnet50_avg', fold=1, load_cache=False)
