@@ -428,15 +428,15 @@ def check_corr(sub1, sub2):
 def combine_submissions():
     for clip10 in [5, 4, 3]:
         sources = [
-            (f'submission_combined_models_nn_combined_extra_dr075_clip_{clip10}.csv', 12.0),
+            (f'submission_combined_models_nn_combined_extra_dr075_clip_{clip10}.csv', 4.0),
             (f'submission_combined_folds_models_nn_clip_{clip10}.csv', 1.0),
             (f'submission_single_folds_models_nn_clip_{clip10}.csv', 1.0),
 
-            (f'submission_combined_models_xgboost_2k_extra_clip_{clip10}.csv', 12.0),
+            (f'submission_combined_models_xgboost_2k_extra_clip_{clip10}.csv', 4.0),
             (f'submission_combined_folds_models_xgboost_clip_{clip10}.csv', 1.0),
             (f'submission_single_folds_models_xgboost_clip_{clip10}.csv', 1.0),
 
-            (f'submission_combined_models_lgb_all_combined_260_clip_{clip10}.csv', 12.0),
+            (f'submission_combined_models_lgb_all_combined_260_clip_{clip10}.csv', 4.0),
             (f'submission_combined_folds_models_lgb_clip_{clip10}.csv', 1.0),
             (f'submission_single_folds_models_lgb_clip_{clip10}.csv', 1.0),
         ]
@@ -448,7 +448,7 @@ def combine_submissions():
             src = pd.read_csv('../submissions/'+src_fn)
             for col in ds.columns[1:]:
                 ds[col] += src[col]*weight/total_weight
-        ds.to_csv(f'../submissions/submission_58_avg_xgb_nn_lgb_all_12_1_1_clip_{clip10}.csv', index=False, float_format='%.8f')
+        ds.to_csv(f'../submissions/submission_59_avg_xgb_nn_lgb_all_4_1_1_clip_{clip10}.csv', index=False, float_format='%.8f')
 
 
 def train_combined_folds_models():
