@@ -12,8 +12,9 @@ information is dropped and only combined prediction statistics used.
 model predictions.
 
 I used following features for xgboost network:
-    * Mean, median, min, max, 10 and 90 percentiles of predicted class probability
-    * Histogram of predicted class probability, 10 bins
+
+* Mean, median, min, max, 10 and 90 percentiles of predicted class probability
+* Histogram of predicted class probability, 10 bins
 
 For neural network, for each class I sorted individual class predictions over 32 frames and
 “downsampled” it 4 times (I took mean of 4 lowest values, values from 5 to 8, etc).
