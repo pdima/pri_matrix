@@ -1,3 +1,5 @@
+import argparse
+
 import numpy as np
 import pandas as pd
 import os
@@ -111,5 +113,13 @@ def generate_labeled():
                index=False, float_format='%.7f', header=True)
 
 
-find_problematic_clips()
-generate_labeled()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='select clips to label')
+    parser.add_argument('action', type=str, default='predict')
+
+    args = parser.parse_args()
+
+    if args.action == 'find_clips':
+        find_problematic_clips()
+    elif args.action == 'generate_labeled_csv':
+        generate_labeled()

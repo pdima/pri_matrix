@@ -175,7 +175,7 @@ MODELS = {
         batch_size=32
     ),
     'resnet50': ModelInfo(
-        factory=build_model_resnet50_avg,
+        factory=build_model_resnet50,
         preprocess_input=preprocess_input_resnet50,
         input_shape=(404, 720, 3),
         unlock_layer_name='activation_22',
@@ -218,11 +218,7 @@ MODELS = {
     ),
 }
 
-# extra names used for different checkpoints, ideas/etc
-# MODELS['inception_v3_avg_m8_ch2'] = MODELS['inception_v3_avg_m8']
-# MODELS['inception_v3_avg_m8_ch5'] = MODELS['inception_v3_avg_m8']
-# MODELS['inception_v3_avg_m8_ch9'] = MODELS['inception_v3_avg_m8']
-# MODELS['inception_v3_avg_m8_ch24'] = MODELS['inception_v3_avg_m8']
+# extra model names used for different checkpoints, ideas/etc
 MODELS['xception_avg_ch10'] = MODELS['xception_avg']
 MODELS['inception_v2_resnet_ch10'] = MODELS['inception_v2_resnet']
 MODELS['inception_v2_resnet_extra'] = MODELS['inception_v2_resnet']
@@ -291,7 +287,7 @@ class SingleFrameCNNDataset:
         self.non_blank_frames = {}
         if use_non_blank_frames:
             for fn in ['resnet50_avg_1_non_blank.pkl',
-                       'resnet50_2_non_blank.pkl',
+                       'resnet50_avg_2_non_blank.pkl',
                        'resnet50_avg_3_non_blank.pkl',
                        'resnet50_avg_4_non_blank.pkl']:
                 data = pickle.load(open('../output/prediction_train_frames/' + fn, 'rb'))
@@ -370,9 +366,9 @@ class SingleFrameCNNDataset:
     def choose_train_video_id(self):
         while True:
             r = np.random.random()
-            if r < 0.04:
+            if r < 0.04 and self.use_extra_clips:
                 return 'labeled_'+np.random.choice(self.extra_labeled_clips)
-            if r < 0.2:
+            if r < 0.2 and self.use_extra_clips:
                 return 'matching_' + np.random.choice(self.extra_matching_clips)
             if r < 0.6:
                 return np.random.choice(self.train_clips)
@@ -498,7 +494,7 @@ def check_generator(use_test):
             plt.show()
 
 
-def train(fold, model_name, weights, initial_epoch, use_non_blank_frames, use_extra_clips):
+def train(fold, model_name, weights, initial_epoch, nb_epochs, use_non_blank_frames, use_extra_clips):
     model_info = MODELS[model_name]
     print(model_name, weights, initial_epoch)
 
@@ -563,7 +559,7 @@ def train(fold, model_name, weights, initial_epoch, use_non_blank_frames, use_ex
     model.fit_generator(
         dataset.generate(),
         steps_per_epoch=dataset.train_steps_per_epoch(),
-        epochs=15,
+        epochs=nb_epochs,
         verbose=1,
         validation_data=dataset.generate_test(),
         validation_steps=dataset.validation_steps(),
@@ -894,6 +890,7 @@ if __name__ == '__main__':
     parser.add_argument('action', type=str, default='check_model')
     parser.add_argument('--weights', type=str, default='')
     parser.add_argument('--initial_epoch', type=int, default=0)
+    parser.add_argument('--nb_epoch', type=int, default=16)
     parser.add_argument('--fold', type=int, default=1)
     parser.add_argument('--model', type=str, default='resnet50')
     parser.add_argument('--use_non_blank_frames', action='store_true')
@@ -916,6 +913,7 @@ if __name__ == '__main__':
               model_name=model,
               weights=args.weights,
               initial_epoch=args.initial_epoch,
+              nb_epochs=args.nb_epoch,
               use_non_blank_frames=args.use_non_blank_frames,
               use_extra_clips=args.use_extra_clips)
     elif action == 'generate_prediction':

@@ -1,3 +1,5 @@
+import argparse
+
 import numpy as np
 import pandas as pd
 import os
@@ -386,6 +388,7 @@ def predict_all_single_fold_models():
                   index=False,
                   float_format='%.8f')
 
+
 def check_corr(sub1, sub2):
     print(sub1, sub2)
     s1 = pd.read_csv('../submissions/' + sub1)
@@ -398,35 +401,17 @@ def check_corr(sub1, sub2):
         print('{:20}  {:.6} {:.6} {:.6}'.format(col, s1[col].mean(), s2[col].mean(), s2[col].mean() - s1[col].mean()))
 
 
-def combine_submissions():
-    sources = [
-        ('submission_one_model_resnet50_avg_1.csv', 4.0),
-        ('submission_one_model_resnet50_2.csv', 4),
-        ('submission_one_model_resnet50_avg_3.csv', 3),
-        ('submission_one_model_resnet50_avg_4.csv', 4),
-        ('submission_one_model_xception_avg_1.csv', 4.0),
-        ('submission_one_model_xception_avg_2.csv', 4.0),
-        ('submission_one_model_xception_avg_3.csv', 4.0),
-        ('submission_one_model_xception_avg_4.csv', 4.0),
-        ('submission_one_model_inception_v3_avg_m8_2.csv', 2),
-        ('submission_one_model_inception_v3_avg_m8_3.csv', 2),
-    ]
-    total_weight = sum([s[1] for s in sources])
-    ds = pd.read_csv(config.SUBMISSION_FORMAT)
-    for src_fn, weight in sources:
-        src = pd.read_csv('../submissions/'+src_fn)
-        for col in ds.columns[1:]:
-            ds[col] += src[col]*weight/total_weight
-    ds.to_csv('../submissions/submission_17_resnet_all_xception_all_inception_v3_2_3.csv', index=False, float_format='%.7f')
-
-
 if __name__ == '__main__':
-    with utils.timeit_context('train xgboost model'):
-        # train_all_models_xgboost_combined("2k_extra", models_with_folds=config.ALL_MODELS)
-        # predict_on_test_combined("2k_extra", models_with_folds=config.ALL_MODELS)
+    parser = argparse.ArgumentParser(description='second stage nn')
+    parser.add_argument('action', type=str, default='predict')
 
-        # train_combined_folds_models()
-        # predict_combined_folds_models()
+    args = parser.parse_args()
 
-        # train_all_single_fold_models()
+    if args.action == 'train':
+        train_all_models_xgboost_combined("2k_extra", models_with_folds=config.ALL_MODELS)
+        train_combined_folds_models()
+        train_all_single_fold_models()
+    elif args.action == 'predict':
+        predict_on_test_combined("2k_extra", models_with_folds=config.ALL_MODELS)
+        predict_combined_folds_models()
         predict_all_single_fold_models()

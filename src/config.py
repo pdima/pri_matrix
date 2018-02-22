@@ -8,7 +8,7 @@ TRAINING_SET_LABELS = '../input/Pri-matrix_Factorization_-_Training_Set_Labels.c
 SUBMISSION_FORMAT = '../input/Pri-matrix_Factorization_-_Submission_Format.csv'
 
 ALL_MODELS = [
-    [('resnet50_avg', 1), ('resnet50', 2), ('resnet50_avg', 3), ('resnet50_avg', 4)],
+    [('resnet50_avg', fold) for fold in [1, 2, 3, 4]],
     [('xception_avg', fold) for fold in [1, 2, 3, 4]],
     [('xception_avg_ch10', fold) for fold in [1, 2, 3, 4]],
     [('inception_v3', fold) for fold in [1, 2, 3, 4]],
@@ -20,7 +20,6 @@ ALL_MODELS = [
 
 MODEL_WEIGHTS = {
     'resnet50_avg': 4,
-    'resnet50': 4,
     'xception_avg': 6,
     'xception_avg_ch10': 8,
     'inception_v3': 8,

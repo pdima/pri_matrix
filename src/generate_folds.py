@@ -65,4 +65,7 @@ def move_unused():
                 print(skip_files)
     print(skip_files)
 
+
+# for new training dataset, it's also necessary to call generate_folds()
+move_non_train()
 move_unused()

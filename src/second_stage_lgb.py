@@ -512,7 +512,7 @@ def combine_submissions():
 
 if __name__ == '__main__':
     with utils.timeit_context('train lgb model'):
-        train_all_models_lgb_combined("all_combined_260", models_with_folds=config.ALL_MODELS)
+        # train_all_models_lgb_combined("all_combined_260", models_with_folds=config.ALL_MODELS)
         predict_on_test_combined("all_combined_260", models_with_folds=config.ALL_MODELS)
         #
         # train_combined_folds_models()

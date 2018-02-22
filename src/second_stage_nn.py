@@ -1,3 +1,5 @@
+import argparse
+
 import numpy as np
 import pandas as pd
 import os
@@ -426,7 +428,7 @@ def check_corr(sub1, sub2):
 
 
 def combine_submissions():
-    for clip10 in [5, 4, 3]:
+    for clip10 in [4]:
         sources = [
             (f'submission_combined_models_nn_combined_extra_dr075_clip_{clip10}.csv', 4.0),
             (f'submission_combined_folds_models_nn_clip_{clip10}.csv', 1.0),
@@ -435,16 +437,10 @@ def combine_submissions():
             (f'submission_combined_models_xgboost_2k_extra_clip_{clip10}.csv', 4.0),
             (f'submission_combined_folds_models_xgboost_clip_{clip10}.csv', 1.0),
             (f'submission_single_folds_models_xgboost_clip_{clip10}.csv', 1.0),
-
-            (f'submission_combined_models_lgb_all_combined_260_clip_{clip10}.csv', 4.0),
-            (f'submission_combined_folds_models_lgb_clip_{clip10}.csv', 1.0),
-            (f'submission_single_folds_models_lgb_clip_{clip10}.csv', 1.0),
         ]
         total_weight = sum([s[1] for s in sources])
         ds = pd.read_csv(config.SUBMISSION_FORMAT)
         for src_fn, weight in sources:
-            check_corr('submission_combined_models_xgboost_2k_extra_clip_4.csv', src_fn)
-
             src = pd.read_csv('../submissions/'+src_fn)
             for col in ds.columns[1:]:
                 ds[col] += src[col]*weight/total_weight
@@ -529,189 +525,31 @@ def predict_unused_clips(data_model_name, data_fold, combined_model_name):
 
 
 if __name__ == '__main__':
-    with utils.timeit_context('train nn model'):
-        pass
-        # try_train_all_models_nn_combined(config.ALL_MODELS)
-        # train_all_models_nn_combined('combined_extra_dr075', config.ALL_MODELS)
-        # predict_on_test_combined('combined_extra_dr075', config.ALL_MODELS)
-        # train_combined_folds_models()
-        # predict_combined_folds_models()
-        # train_all_single_fold_models()
-        # predict_all_single_fold_models()
+    parser = argparse.ArgumentParser(description='second stage nn')
+    parser.add_argument('action', type=str, default='predict')
 
+    args = parser.parse_args()
+
+    if args.action == 'train':
+        train_all_models_nn_combined('combined_extra_dr075', config.ALL_MODELS)
+        train_combined_folds_models()
+        train_all_single_fold_models()
+    elif args.action == 'predict':
+        predict_on_test_combined('combined_extra_dr075', config.ALL_MODELS)
+        predict_combined_folds_models()
+        predict_all_single_fold_models()
+    elif args.action == 'generate_submission':
         combine_submissions()
-
-        # try_train_model_nn(model_name='inception_v2_resnet_extra', fold=3)
-
-        # model_xgboost(model_name='resnet50_avg', fold=4, load_cache=False)
-        # model_xgboost(model_name='resnet50_avg', fold=1, load_cache=False)
-        # model_xgboost(model_name='resnet50', fold=2, load_cache=False)
-        # model_xgboost(model_name='inception_v3_avg', fold=3, load_cache=False)
-        # model_xgboost(model_name='resnet50_avg', fold=3, load_cache=False)
-        # try_train_model_xgboost(model_name='inception_v3_avg', fold=3, load_cache=True)
-        # try_train_model_xgboost(model_name='inception_v3_avg_m8', fold=3, load_cache=True)
-        # model_xgboost(model_name='inception_v3_avg_m8', fold=3, load_cache=True)
-        # model_xgboost(model_name='inception_v3_avg_m8', fold=2, load_cache=False)
-        # model_xgboost(model_name='xception_avg', fold=1, load_cache=False)
-        # model_xgboost(model_name='xception_avg', fold=2, load_cache=False)
-        # model_xgboost(model_name='xception_avg', fold=3, load_cache=False)
-        # model_xgboost(model_name='xception_avg', fold=4, load_cache=False)
-        # model_xgboost(model_name='inception_v2_resnet', fold=1, load_cache=False)
-        # model_xgboost(model_name='inception_v2_resnet', fold=2, load_cache=False)
-        # try_train_model_nn(model_name='inception_v2_resnet', fold=1, load_cache=True)
-        # train_model_nn(model_name='inception_v2_resnet', fold=1, load_cache=True)
-        # try_train_model_nn(model_name='inception_v3_avg_m8_ch2', fold=1, load_cache=True)
-        # try_train_model_nn(model_name='inception_v3_avg_m8_ch5', fold=1, load_cache=True)
-        # try_train_model_nn(model_name='inception_v3_avg_m8_ch9', fold=1, load_cache=True)
-        # try_train_model_nn(model_name='inception_v3_avg_m8_ch24', fold=1, load_cache=True)
-        # train_model_nn(model_name='inception_v3_avg_m8_ch9', fold=1, load_cache=True)
-
-        # train_model_nn(model_name='inception_v3_avg_m8_ch2', fold=1, load_cache=True)
-        # train_model_nn(model_name='inception_v3_avg_m8_ch5', fold=1, load_cache=True)
-        # train_model_nn(model_name='inception_v3_avg_m8_ch24', fold=1, load_cache=True)
-        #try_train_model_nn(model_name='resnet152', fold=2, load_cache=True)
-        #train_model_nn(model_name='resnet152', fold=2, load_cache=True)
-
-
-
-    # predict_on_test('resnet50_avg', 1, use_cache=False)
-    # predict_on_test('resnet50_avg', 4, use_cache=False)
-    # predict_on_test('resnet50', 2, use_cache=False)
-    # predict_on_test('inception_v3_avg', 3, use_cache=False)
-    # predict_on_test('resnet50_avg', 3, use_cache=False)
-    # predict_on_test('inception_v3_avg_m8', 3, use_cache=False)
-    # predict_on_test('inception_v3_avg_m8', 2, use_cache=False)
-    # predict_on_test('xception_avg', 1, use_cache=False)
-    # predict_on_test('xception_avg', 2, use_cache=False)
-    # predict_on_test('xception_avg', 3, use_cache=False)
-    # predict_on_test('xception_avg', 4, use_cache=False)
-    # predict_on_test('inception_v2_resnet', 1, use_cache=False)
-    # predict_on_test('inception_v2_resnet', 2, use_cache=False)
-
-    # predict_on_test('inception_v2_resnet', 1, use_cache=False)
-
-    # predict_on_test(model_name='inception_v3_avg_m8_ch2', fold=1, use_cache=False)
-    # predict_on_test(model_name='inception_v3_avg_m8_ch5', fold=1, use_cache=False)
-    # predict_on_test(model_name='inception_v3_avg_m8_ch24', fold=1, use_cache=False)
-
-    # train_model_nn(model_name='xception_avg_ch10', fold=2, load_cache=True)
-    # predict_on_test(model_name='xception_avg_ch10', fold=2, use_cache=False)
-    # try_train_model_nn(model_name='xception_avg_ch10', fold=2, load_cache=True)
-
-    # train_model_nn_combined_folds('xception_avg_combined',
-    #                         [('xception_avg', fold) for fold in [1, 2, 3, 4]],
-    #                         load_cache=True)
-
-    # predict_on_test(model_name='xception_avg_combined', fold=0, use_cache=False,
-    #                 data_model_name='xception_avg', data_fold=2)
-    # predict_on_test(model_name='resnet152', fold=2, use_cache=False)
-    #train_model_nn(model_name='inception_v3', fold=1, load_cache=True)
-    #train_model_nn(model_name='inception_v2_resnet', fold=3, load_cache=True)
-    #train_model_nn(model_name='inception_v2_resnet', fold=4, load_cache=True)
-    #predict_on_test(model_name='inception_v3', fold=1, use_cache=False)
-    #predict_on_test(model_name='inception_v2_resnet', fold=3, use_cache=False)
-    #predict_on_test(model_name='inception_v2_resnet', fold=4, use_cache=False)
-    #try_train_model_nn(model_name='inception_v3', fold=1, load_cache=True)
-    #try_train_model_nn(model_name='inception_v2_resnet', fold=3, load_cache=True)
-    #try_train_model_nn(model_name='inception_v2_resnet', fold=4, load_cache=True)
-    
-    #train_model_nn(model_name='inception_v3', fold=2, load_cache=True)
-    #predict_on_test(model_name='inception_v3', fold=2, use_cache=False)
-    #train_model_nn(model_name='inception_v3', fold=4, load_cache=True)
-    #predict_on_test(model_name='inception_v3', fold=4, use_cache=False)
-    #try_train_model_nn(model_name='inception_v3', fold=2, load_cache=True)
-    #try_train_model_nn(model_name='inception_v3', fold=4, load_cache=True)
-
-    #train_model_nn(model_name='xception_avg_ch10', fold=1)
-    #predict_on_test(model_name='xception_avg_ch10', fold=1)
-    #try_train_model_nn(model_name='xception_avg_ch10', fold=1, load_cache=True)
-
-
-    #train_model_nn(model_name='inception_v2_resnet_ch10', fold=3)
-    #predict_on_test(model_name='inception_v2_resnet_ch10', fold=3)
-    #try_train_model_nn(model_name='inception_v2_resnet_ch10', fold=3, load_cache=True)
-    
-    # train_model_nn(model_name='resnet152', fold=3)
-    # predict_on_test(model_name='resnet152', fold=3)
-    # try_train_model_nn(model_name='resnet152', fold=3, load_cache=True)
-
-    # train_model_nn(model_name='xception_avg_ch10', fold=3)
-    # predict_on_test(model_name='xception_avg_ch10', fold=3)
-    #
-    # train_model_nn(model_name='xception_avg_ch10', fold=4)
-    # predict_on_test(model_name='xception_avg_ch10', fold=4)
-    #
-    # try_train_model_nn(model_name='xception_avg_ch10', fold=3, load_cache=True)
-    # try_train_model_nn(model_name='xception_avg_ch10', fold=4, load_cache=True)
-
-    # for fold in range(1, 5):
-    #     train_model_nn(model_name='xception_avg', fold=fold, load_cache=True)
-    #     predict_on_test(model_name='xception_avg', fold=fold, use_cache=False)
-    #
-    # for fold in range(1, 5):
-    #     try_train_model_nn(model_name='xception_avg', fold=fold, load_cache=True)
-    # combine_submissions()
-    # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_one_model_resnet50_avg_4.csv')
-    # check_corr('submission_one_model_resnet50_avg_1.csv', 'submission_3_resnet_folds_1_4.csv')
-    # check_corr('submission_one_model_resnet50_2.csv', 'submission_3_resnet_folds_1_4.csv')
-    # check_corr('submission_one_model_resnet50_2.csv', 'submission_one_model_resnet50_avg_1.csv')
-    # combine_submissions()
-    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_3_resnet_folds_1_4.csv')
-    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_one_model_inception_v3_avg_3.csv')
-    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_one_model_resnet50_avg_3.csv')
-    # check_corr('submission_one_model_inception_v3_avg_3.csv', 'submission_one_model_resnet50_avg_3.csv')
-    # check_corr('submission_5_resnet_folds_1_2_4.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_one_model_inception_v3_avg_m8_2.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_one_model_xception_avg_1.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_one_model_xception_avg_3.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_one_model_xception_avg_4.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_17_resnet_all_xception_all_inception_v3_2_3.csv', 'submission_8_resnet_folds_1_2_3_4.csv')
-    # check_corr('submission_one_model_inception_v2_resnet_2.csv', 'submission_17_resnet_all_xception_all_inception_v3_2_3.csv')
-    # check_corr('submission_one_model_inception_v2_resnet_1.csv', 'submission_17_resnet_all_xception_all_inception_v3_2_3.csv')
-    # check_corr('submission_one_model_inception_v2_resnet_1.csv', 'submission_one_model_inception_v2_resnet_2.csv')
-    # combine_submissions()
-    # check_corr('submission_one_model_nn_inception_v2_resnet_1.csv', 'submission_one_model_inception_v2_resnet_1.csv')
-
-    # train_combined_folds_models()
-    # predict_unused_clips(data_model_name='resnet50_avg', data_fold=2, combined_model_name='resnet50_combined')
-    # predict_unused_clips(data_model_name='inception_v3', data_fold=1, combined_model_name='inception_v3_combined')
-    # predict_unused_clips(data_model_name='inception_v3', data_fold=2, combined_model_name='inception_v3_combined')
-    # predict_unused_clips(data_model_name='xception_avg', data_fold=1, combined_model_name='xception_avg_ch10_combined')
-    # predict_unused_clips(data_model_name='xception_avg', data_fold=2, combined_model_name='xception_avg_ch10_combined')
-
-    # train_model_nn(model_name='inception_v2_resnet_ch10', fold=1)
-    # predict_on_test(model_name='inception_v2_resnet_ch10', fold=1)
-    # try_train_model_nn(model_name='inception_v2_resnet_ch10', fold=1, load_cache=True)
-    #
-    # train_model_nn(model_name='inception_v2_resnet_ch10', fold=2)
-    # try_train_model_nn(model_name='inception_v2_resnet_ch10', fold=2, load_cache=True)
-    #
-    # train_model_nn(model_name='inception_v2_resnet_ch10', fold=4)
-    # try_train_model_nn(model_name='inception_v2_resnet_ch10', fold=4, load_cache=True)
-
-    # predict_on_test(model_name='inception_v2_resnet_ch10', fold=4)
-
-    # train_model_nn(model_name='resnet152', fold=1)
-    # predict_on_test(model_name='resnet152', fold=1)
-    #
-    # train_model_nn(model_name='resnet152', fold=4)
-    # predict_on_test(model_name='resnet152', fold=4)
-    #
-    # try_train_model_nn(model_name='resnet152', fold=1)
-    # try_train_model_nn(model_name='resnet152', fold=4)
-
-
-    # check_corr('submission_combined_models_nn_models_all_combined1_clip_4.csv',
-    #            'submission_combined_folds_models_nn_clip_4.csv')
-    # check_corr('submission_combined_models_nn_models_all_combined1_clip_4.csv',
-    #            'submission_combined_models_xgboost_2k_clip_4.csv')
-    # check_corr('submission_combined_models_nn_models_all_combined1_clip_4.csv',
-    #            'submission_single_folds_models_nn_clip_4.csv')
-
-
-    # check_corr('submission_combined_models_nn_models_all_combined1_clip_4.csv',
-    #            'submission_combined_models_xgboost_2k_extra_clip_4.csv')
-    #
-    # check_corr('submission_combined_models_xgboost_2k_clip_4.csv',
-    #            'submission_combined_models_xgboost_2k_extra_clip_4.csv')
-
+    elif args.action == 'predict_unused':
+        for models in config.ALL_MODELS[:-1]:
+            combined_model_name = models[0][0] + '_combined'
+            print('*' * 64)
+            print(combined_model_name)
+            print('*' * 64)
+            train_model_nn_combined_folds(combined_model_name, models, load_cache=True)
+        train_combined_folds_models()
+        predict_unused_clips(data_model_name='resnet50_avg', data_fold=2, combined_model_name='resnet50_avg_combined')
+        predict_unused_clips(data_model_name='inception_v3', data_fold=1, combined_model_name='inception_v3_combined')
+        predict_unused_clips(data_model_name='inception_v3', data_fold=2, combined_model_name='inception_v3_combined')
+        predict_unused_clips(data_model_name='xception_avg', data_fold=1, combined_model_name='xception_avg_ch10_combined')
+        predict_unused_clips(data_model_name='xception_avg', data_fold=2, combined_model_name='xception_avg_ch10_combined')
